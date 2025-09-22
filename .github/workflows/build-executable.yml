@@ -64,6 +64,7 @@ jobs:
         continue-on-error: true
 
       - name: Create Release Notes
+        shell: bash
         run: |
           echo "## What's New" > release_notes.txt
           echo "" >> release_notes.txt
