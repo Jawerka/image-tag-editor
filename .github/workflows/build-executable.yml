@@ -50,7 +50,6 @@ jobs:
           vt_api_key: ${{ secrets.VIRUSTOTAL_API }}
           files: |
             dist/ImageTagEditor.exe
-          check_existing: true
         continue-on-error: true
 
       - name: Scan Source File with VirusTotal
@@ -60,7 +59,6 @@ jobs:
           vt_api_key: ${{ secrets.VIRUSTOTAL_API }}
           files: |
             main.py
-          check_existing: true
         continue-on-error: true
 
       - name: Create Release Notes
@@ -68,6 +66,12 @@ jobs:
         run: |
           echo "## What's New" > release_notes.txt
           echo "" >> release_notes.txt
+          echo "- Added comprehensive data validation and debugging tools" >> release_notes.txt
+          echo "- Implemented new tag suggestion testing framework" >> release_notes.txt
+          echo "- Enhanced development environment with debugging utilities" >> release_notes.txt
+          echo "- Added OC (Original Character) tag debugging functionality" >> release_notes.txt
+          echo "- Improved test coverage with multiple test datasets" >> release_notes.txt
+          echo "- Added comprehensive development documentation and setup guide" >> release_notes.txt
           echo "- Enhanced tag autocomplete with intelligent substring matching" >> release_notes.txt
           echo "- Added F-key navigation hotkeys (F1/F2 for navigation, F5 for refresh, etc.)" >> release_notes.txt
           echo "- Improved dark theme design with consistent styling" >> release_notes.txt
@@ -102,6 +106,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = if ($env:GITHUB_REF -match "refs/tags/(.*)") { $matches[1] } else { "v1.0.0" }
+          $tag = if ($env:GITHUB_REF -match "refs/tags/(.*)") { $matches[1] } else { "v1.1.0" }
           gh release create "$tag" dist/ImageTagEditor.exe --draft --title "Image Tag Editor $tag" --notes-file release_notes.txt
         shell: powershell

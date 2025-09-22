@@ -80,6 +80,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QStatusBar,
+    QMessageBox,
 )
 
 # --------------------------- Константы конфигурации ---------------------------
@@ -366,6 +367,7 @@ class TagAutoCompleteApp(QMainWindow):
         self.tag_db: Optional[pd.DataFrame] = None
         self.all_tags: List[str] = []
         self.all_tags_lower: List[str] = []
+        self.tag_frequencies: dict[str, int] = {}  # tag -> frequency mapping
         self.tag_cache: dict[str, List[str]] = {}
 
         self.current_image_path: Optional[Path] = None
@@ -514,41 +516,92 @@ class TagAutoCompleteApp(QMainWindow):
             logger.warning("Tag database %s not found — подсказки будут недоступны.", TAG_DB_CSV)
             self.all_tags = []
             self.all_tags_lower = []
+            self.tag_frequencies = {}
             return
 
         try:
-            self.tag_db = pd.read_csv(TAG_DB_CSV, dtype=str, encoding="utf-8", low_memory=False).fillna("")
-            self.all_tags = self.process_tags(self.tag_db)
+            # Всегда используем ручной парсинг для надежности
+            # Стандартный pandas часто пропускает строки из-за некорректных кавычек
+            logger.info("Using manual CSV parsing for maximum reliability")
+            self.tag_db = self._manual_csv_parse(TAG_DB_CSV)
+                
+            self.all_tags, self.tag_frequencies = self.process_tags_with_frequency(self.tag_db)
             self.all_tags_lower = [t.lower() for t in self.all_tags]
-            logger.info("Loaded %d tags from %s", len(self.all_tags), TAG_DB_CSV)
+            logger.info("Loaded %d tags with frequencies from %s", len(self.all_tags), TAG_DB_CSV)
         except Exception as exc:
             logger.exception("Error loading tag DB: %s", exc)
             self.all_tags = []
             self.all_tags_lower = []
+            self.tag_frequencies = {}
 
-    @staticmethod
-    def process_tags(df: pd.DataFrame) -> List[str]:
-        """Извлечь уникальные теги из датафрейма CSV.
-
-        Возвращает отсортированный список тегов (регистронезависимая сортировка).
+    def _manual_csv_parse(self, csv_path: Path) -> pd.DataFrame:
+        """Ручной парсинг CSV для случаев, когда pandas не справляется.
+        
+        Обрабатывает строки вида: tag,category,frequency,"alternatives"
         """
-        tags_set: set[str] = set()
+        import csv
+        from io import StringIO
+        
+        rows = []
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            for line_no, line in enumerate(f, 1):
+                try:
+                    # Простой парсинг CSV строки
+                    reader = csv.reader([line.strip()], quotechar='"', delimiter=',')
+                    row = next(reader)
+                    # Дополняем до 4 колонок если нужно
+                    while len(row) < 4:
+                        row.append("")
+                    rows.append(row)
+                except Exception as e:
+                    logger.warning("Failed to parse line %d: %s", line_no, e)
+                    continue
+        
+        logger.info("Manual CSV parsing: %d rows processed", len(rows))
+        return pd.DataFrame(rows)
+
+    def process_tags_with_frequency(self, df: pd.DataFrame) -> tuple[List[str], dict[str, int]]:
+        """Извлечь теги и их частоты из датафрейма CSV.
+        
+        Структура CSV: tag_name, category, frequency, alternatives
+        Возвращает: (список тегов, словарь tag -> frequency)
+        """
+        tag_freq_map: dict[str, int] = {}
+        
         for _, row in df.iterrows():
-            for cell in row:
-                if not isinstance(cell, str):
-                    continue
-                text = cell.strip()
-                if not text:
-                    continue
-                # столбцы могут содержать списки через запятую
-                if "," in text:
-                    for part in text.split(","):
-                        p = part.strip()
-                        if p:
-                            tags_set.add(p)
-                else:
-                    tags_set.add(text)
-        return sorted(tags_set, key=lambda s: s.lower())
+            if len(row) < 3:
+                continue
+                
+            # Основной тег из первого столбца
+            main_tag = str(row.iloc[0]).strip()
+            if main_tag:
+                try:
+                    frequency = int(row.iloc[2]) if str(row.iloc[2]).isdigit() else 0
+                    tag_freq_map[main_tag] = frequency
+                except (ValueError, IndexError):
+                    tag_freq_map[main_tag] = 0
+            
+            # Альтернативные теги из четвертого столбца (если есть)
+            if len(row) >= 4 and str(row.iloc[3]).strip():
+                alternatives = str(row.iloc[3]).strip()
+                if alternatives:
+                    for alt_tag in alternatives.split(","):
+                        alt_tag = alt_tag.strip()
+                        if alt_tag and alt_tag not in tag_freq_map:
+                            # Альтернативные теги получают половину частоты основного тега
+                            try:
+                                base_freq = int(row.iloc[2]) if str(row.iloc[2]).isdigit() else 0
+                                tag_freq_map[alt_tag] = max(1, base_freq // 2)
+                            except (ValueError, IndexError):
+                                tag_freq_map[alt_tag] = 1
+        
+        # Сортируем теги по частоте (популярные первыми), потом алфавитно
+        sorted_tags = sorted(tag_freq_map.keys(), key=lambda tag: (-tag_freq_map[tag], tag.lower()))
+        
+        logger.debug("Top 10 most frequent tags: %s", 
+                    [(tag, tag_freq_map[tag]) for tag in sorted_tags[:10]])
+        
+        return sorted_tags, tag_freq_map
 
     # ---------------- Подключения сигналов ----------------
     def _setup_connections(self) -> None:
@@ -612,57 +665,119 @@ class TagAutoCompleteApp(QMainWindow):
         self.show_suggestions(suggestions)
 
     def find_suggestions(self, query: str) -> List[str]:
-        q = query.lower()
+        """Найти подсказки для запроса с приоритизацией по частоте и релевантности.
+        
+        Новый улучшенный алгоритм:
+        1. Точные совпадения (query == tag) - по частоте (самые популярные первыми)
+        2. Теги, начинающиеся с query - по частоте, затем по длине (короткие лучше)
+        3. Теги, где query начинает слово после разделителя - по частоте, позиции, длине
+        4. Теги, содержащие query как подстроку - по частоте, позиции, длине
+        
+        Ключевые улучшения:
+        - Строгий приоритет точных совпадений
+        - Частота как главный критерий сортировки
+        - Никаких орфографических исправлений
+        - Максимальная производительность поиска
+        """
+        q = query.lower().strip()
         if not q or not self.all_tags:
-            logger.debug("No query or empty tag list — returning []")
+            logger.debug("Empty query or no tags available")
             return []
+            
+        # Используем кэш для часто запрашиваемых результатов
         if q in self.tag_cache:
             logger.debug("Cache hit for '%s'", q)
             return self.tag_cache[q]
 
-        # Improved substring matching prioritizing relevance
-        exact = []
-        starts = []
-        contains = []
-        word_starts = []  # words that start with query after underscore/space
+        # Функция для получения частоты тега
+        def get_frequency(tag: str) -> int:
+            return self.tag_frequencies.get(tag, 0)
 
-        for orig, lower in zip(self.all_tags, self.all_tags_lower):
-            if lower == q:
-                exact.append(orig)
-            elif lower.startswith(q):
-                starts.append(orig)
-            elif q in lower:
-                # Check if query starts a word part (after underscore, space, or dash)
-                parts = lower.replace('_', ' ').replace('-', ' ').split()
-                is_word_start = any(part.startswith(q) for part in parts)
-                if is_word_start:
-                    word_starts.append(orig)
-                else:
-                    contains.append(orig)
+        # Категории совпадений для приоритизации
+        exact_matches = []      # [(tag, frequency)]
+        prefix_matches = []     # [(tag, frequency, tag_length)]
+        word_start_matches = [] # [(tag, frequency, match_position, tag_length)]
+        substring_matches = []  # [(tag, frequency, match_position, tag_length)]
+
+        # Быстрый поиск для производительности и точности
+        for i in range(len(self.all_tags)):
+            orig_tag = self.all_tags[i]
+            lower_tag = self.all_tags_lower[i]
+            frequency = get_frequency(orig_tag)
             
-            if len(exact) + len(starts) + len(word_starts) + len(contains) >= MAX_SUGGESTIONS * 2:
+            if lower_tag == q:
+                # Точное совпадение - наивысший приоритет
+                exact_matches.append((orig_tag, frequency))
+                logger.debug("Exact match found: %s (freq: %d)", orig_tag, frequency)
+                
+            elif lower_tag.startswith(q):
+                # Префиксное совпадение - высокий приоритет
+                prefix_matches.append((orig_tag, frequency, len(orig_tag)))
+                
+            else:
+                # Поиск вхождения подстроки
+                pos = lower_tag.find(q)
+                if pos != -1:
+                    # Проверяем, начинается ли с начала слова
+                    is_word_start = (pos == 0 or lower_tag[pos - 1] in ('_', '-', ' ', ':'))
+                    
+                    if is_word_start:
+                        word_start_matches.append((orig_tag, frequency, pos, len(orig_tag)))
+                    else:
+                        substring_matches.append((orig_tag, frequency, pos, len(orig_tag)))
+            
+            # Ранний выход для точных совпадений - если нашли точное, можно сразу показать лучшие результаты
+            if exact_matches and len(exact_matches) >= 2:
+                # Если нашли точные совпадения, завершаем поиск рано
+                break
+                
+            # Ограничение для производительности - но только после потенциального точного совпадения
+            total_found = len(exact_matches) + len(prefix_matches) + len(word_start_matches) + len(substring_matches)
+            if total_found >= MAX_SUGGESTIONS * 8:  # Собираем больше для лучшей сортировки
                 break
 
-        # Prioritize: exact -> starts with -> word starts -> contains
-        results = exact + starts + word_starts + contains
+        # Сортировка каждой категории
         
-        # Add fuzzy matches if we still need more
-        if len(results) < MAX_SUGGESTIONS:
-            close = difflib.get_close_matches(q, self.all_tags_lower, n=MAX_SUGGESTIONS, cutoff=0.6)
-            for c in close:
-                try:
-                    idx = self.all_tags_lower.index(c)
-                    candidate = self.all_tags[idx]
-                    if candidate not in results:
-                        results.append(candidate)
-                except ValueError:
-                    continue
-                if len(results) >= MAX_SUGGESTIONS:
-                    break
+        # 1. Точные совпадения - по частоте (популярные первыми)
+        exact_matches.sort(key=lambda x: -x[1])
+        exact_results = [tag for tag, _ in exact_matches]
+        
+        # 2. Префиксные совпадения - по частоте, затем по длине (короткие теги лучше)
+        prefix_matches.sort(key=lambda x: (-x[1], x[2]))
+        prefix_results = [tag for tag, _, _ in prefix_matches]
+        
+        # 3. Начало слова - по частоте, позиции совпадения, длине
+        word_start_matches.sort(key=lambda x: (-x[1], x[2], x[3]))
+        word_start_results = [tag for tag, _, _, _ in word_start_matches]
+        
+        # 4. Вхождения подстроки - по частоте, позиции, длине
+        substring_matches.sort(key=lambda x: (-x[1], x[2], x[3]))
+        substring_results = [tag for tag, _, _, _ in substring_matches]
 
-        suggestions = results[:MAX_SUGGESTIONS]
+        # Объединяем в порядке приоритета: точные -> префиксы -> начала слов -> подстроки
+        all_results = exact_results + prefix_results + word_start_results + substring_results
+        
+        # Убираем дубликаты, сохраняя порядок
+        seen = set()
+        unique_results = []
+        for tag in all_results:
+            if tag not in seen:
+                seen.add(tag)
+                unique_results.append(tag)
+        
+        # Ограничиваем до MAX_SUGGESTIONS
+        suggestions = unique_results[:MAX_SUGGESTIONS]
+        
+        # Кэшируем результат
         self.tag_cache[q] = suggestions
-        logger.debug("Substring suggestions for '%s' -> %s", q, suggestions)
+        
+        # Логирование для отладки
+        if suggestions:
+            suggestions_with_freq = [(tag, get_frequency(tag)) for tag in suggestions]
+            logger.debug("Suggestions for '%s': %s", q, suggestions_with_freq)
+        else:
+            logger.debug("No suggestions found for '%s'", q)
+        
         return suggestions
 
     def show_suggestions(self, suggestions: List[str]) -> None:

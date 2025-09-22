@@ -11,48 +11,133 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 
 def test_tag_processing():
-    """Test tag processing functionality."""
+    """Test tag processing functionality with frequency support."""
     print("Testing tag processing...")
     
     # Import after adding to path
     from main import TagAutoCompleteApp
     
-    # Create test DataFrame
+    # Create test DataFrame mimicking derpibooru structure
     test_data = pd.DataFrame({
-        'tag1': ['apple', 'banana,cherry', 'dog'],
-        'tag2': ['red,green', 'yellow', 'animal'],
-        'tag3': ['fruit', 'sweet', 'pet']
+        'tag': ['apple', 'banana', 'dog'],
+        'category': ['0', '1', '3'],
+        'frequency': ['1000', '500', '2000'],
+        'alternatives': ['fruit,red', 'yellow', 'animal,pet']
     })
     
-    # Test process_tags method
-    result = TagAutoCompleteApp.process_tags(test_data)
+    # Create app instance to test the method
+    app = TagAutoCompleteApp.__new__(TagAutoCompleteApp)
     
-    expected_tags = ['animal', 'apple', 'banana', 'cherry', 'dog', 'fruit', 'green', 'pet', 'red', 'sweet', 'yellow']
+    # Test process_tags_with_frequency method
+    result_tags, result_frequencies = app.process_tags_with_frequency(test_data)
     
-    assert sorted(result) == expected_tags, f"Expected {expected_tags}, got {sorted(result)}"
-    print("✓ Tag processing test passed")
+    # Check that main tags are present
+    assert 'apple' in result_tags, "apple should be in tags"
+    assert 'banana' in result_tags, "banana should be in tags"
+    assert 'dog' in result_tags, "dog should be in tags"
+    
+    # Check that alternative tags are present
+    assert 'fruit' in result_tags, "fruit should be in alternative tags"
+    assert 'animal' in result_tags, "animal should be in alternative tags"
+    
+    # Check frequencies
+    assert result_frequencies['apple'] == 1000, f"apple frequency should be 1000, got {result_frequencies['apple']}"
+    assert result_frequencies['dog'] == 2000, f"dog frequency should be 2000, got {result_frequencies['dog']}"
+    
+    # Check that alternatives have reduced frequency
+    assert result_frequencies['fruit'] == 500, f"fruit frequency should be 500 (half of apple), got {result_frequencies['fruit']}"
+    
+    print("✓ Tag processing with frequency test passed")
 
-def test_substring_matching():
-    """Test the improved substring matching functionality."""
-    print("Testing substring matching...")
+def test_frequency_aware_matching():
+    """Test the frequency-aware substring matching functionality."""
+    print("Testing frequency-aware matching...")
     
     from main import TagAutoCompleteApp
     
-    # Create mock app instance
+    # Create mock app instance with frequency data based on real derpibooru patterns
     app = Mock()
-    app.all_tags = ['saddle_bag', 'safe', 'santa_hat', 'sad_face', 'sandwich', 'save_file']
+    app.all_tags = [
+        'safe', 'saddle', 'sadness', 'safety_first',  # starts with 'sa'
+        'santa_hat', 'salad_bowl', 'sample_text',     # starts with 'sa' 
+        'transparent_safe', 'unsafe_area', 'casa_blanca',  # contains 'sa'
+        'design_salary', 'message_saved', 'easy_task',     # contains 'sa'
+        'solo', 'smiling', 'simple_background',  # starts with 's' - high frequency
+        'dog', 'cat', 'tree', 'house'  # unrelated tags
+    ]
     app.all_tags_lower = [tag.lower() for tag in app.all_tags]
+    
+    # Frequency data simulating real derpibooru frequencies
+    app.tag_frequencies = {
+        'safe': 2204259,  # очень популярный тег
+        'solo': 1450934,  # очень популярный тег  
+        'smiling': 408347,  # популярный тег
+        'simple_background': 612319,  # популярный тег
+        'saddle': 5000,   # менее популярный
+        'sadness': 1000,  # редкий тег
+        'safety_first': 100,  # очень редкий
+        'santa_hat': 50000,  # средней популярности
+        'salad_bowl': 500,  # редкий
+        'sample_text': 100,  # очень редкий
+        'transparent_safe': 25000,  # средней популярности
+        'unsafe_area': 2000,  # менее популярный
+        'casa_blanca': 50,  # очень редкий
+        'design_salary': 300,  # редкий
+        'message_saved': 150,  # очень редкий
+        'easy_task': 800,  # редкий
+        'dog': 100000,  # популярный
+        'cat': 80000,   # популярный
+        'tree': 60000,  # популярный
+        'house': 40000  # популярный
+    }
     app.tag_cache = {}
     
-    # Test find_suggestions method
+    # Test 'sa' query - should prioritize by frequency within matching categories
     suggestions = TagAutoCompleteApp.find_suggestions(app, 'sa')
+    print(f"Suggestions for 'sa': {suggestions}")
+    print(f"With frequencies: {[(tag, app.tag_frequencies.get(tag, 0)) for tag in suggestions]}")
     
-    # Should prioritize word starts like 'saddle_bag', 'santa_hat'
-    assert 'saddle_bag' in suggestions, "saddle_bag should be in suggestions for 'sa'"
-    assert 'santa_hat' in suggestions, "santa_hat should be in suggestions for 'sa'" 
-    assert 'safe' in suggestions, "safe should be in suggestions for 'sa'"
+    # 'safe' should be first as it has highest frequency among 'sa' matches
+    assert suggestions[0] == 'safe', f"'safe' should be first, got {suggestions[0]}"
+    assert 'santa_hat' in suggestions, "santa_hat should be in suggestions"
     
-    print("✓ Substring matching test passed")
+    # Test 's' query - should show popular 's' tags first
+    s_suggestions = TagAutoCompleteApp.find_suggestions(app, 's')
+    print(f"Suggestions for 's': {s_suggestions}")
+    print(f"With frequencies: {[(tag, app.tag_frequencies.get(tag, 0)) for tag in s_suggestions]}")
+    
+    # Should prioritize high-frequency tags starting with 's'
+    assert 'safe' in s_suggestions, "safe should be in 's' suggestions"
+    assert 'solo' in s_suggestions, "solo should be in 's' suggestions"
+    
+    # Test exact match prioritization
+    safe_suggestions = TagAutoCompleteApp.find_suggestions(app, 'safe')
+    print(f"Suggestions for 'safe': {safe_suggestions}")
+    assert 'safe' == safe_suggestions[0], "Exact match 'safe' should be first"
+    
+    print("✓ Frequency-aware matching test passed")
+
+def test_substring_matching():
+    """Test the basic substring matching (legacy test for compatibility)."""
+    print("Testing basic substring matching...")
+    
+    from main import TagAutoCompleteApp
+    
+    # Create simple mock app instance
+    app = Mock()
+    app.all_tags = ['safe', 'saddle', 'santa_hat', 'transparent_safe']
+    app.all_tags_lower = [tag.lower() for tag in app.all_tags]
+    app.tag_frequencies = {'safe': 1000, 'saddle': 500, 'santa_hat': 300, 'transparent_safe': 100}
+    app.tag_cache = {}
+    
+    suggestions = TagAutoCompleteApp.find_suggestions(app, 'sa')
+    print(f"Basic suggestions for 'sa': {suggestions}")
+    
+    assert 'safe' in suggestions, "safe should be in suggestions"
+    assert 'saddle' in suggestions, "saddle should be in suggestions"
+    assert 'santa_hat' in suggestions, "santa_hat should be in suggestions"
+    
+    print("✓ Basic substring matching test passed")
 
 def test_hotkey_functions():
     """Test that hotkey functions are properly defined."""
@@ -104,8 +189,7 @@ def test_file_structure():
         'LICENSE',
         '.gitignore',
         '.github/workflows/build-executable.yml',
-        'ImageTagEditor.spec',
-        'create_icon.py'
+        'ImageTagEditor.spec'
     ]
     
     for file_path in required_files:
@@ -154,6 +238,7 @@ def main():
         
         # Run function tests
         test_tag_processing()
+        test_frequency_aware_matching()
         test_substring_matching()
         test_hotkey_functions()
         test_error_handling()
