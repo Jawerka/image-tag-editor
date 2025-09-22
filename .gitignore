@@ -171,6 +171,7 @@ tmp/
 
 # Include important project files
 !requirements.txt
+!icon.ico
 
 # Include assets folder with screenshots and documentation
 !assets/

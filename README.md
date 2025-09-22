@@ -103,39 +103,201 @@
 <details>
 <summary>Нажмите, чтобы увидеть инструкции для программистов</summary>
 
-### Установка из исходного кода
+### Установка и настройка окружения разработки
 
-1. Установите Python 3.10+ с [официального сайта](https://www.python.org/downloads/)
-2. Клонируйте репозиторий:
+#### Шаг 1: Установка Git
+
+Git необходим для загрузки исходного кода проекта с GitHub.
+
+1. **Скачайте Git**:
+   - Перейдите на [официальный сайт Git](https://git-scm.com/downloads)
+   - Скачайте версию для вашей операционной системы
+   - Запустите установщик и следуйте инструкциям
+
+2. **Настройка Git (необязательно, но рекомендуется)**:
+   ```bash
+   git config --global user.name "Ваше имя"
+   git config --global user.email "ваш-email@example.com"
+   ```
+
+3. **Проверьте установку**:
+   ```cmd
+   git --version
+   ```
+   Должна отобразиться версия Git.
+
+**Альтернативные способы получения кода:**
+- Если не хотите устанавливать Git, можете скачать архив с кодом:
+  - Откройте [страницу репозитория](https://github.com/Jawerka/image-tag-editor)
+  - Нажмите зеленую кнопку "Code"
+  - Выберите "Download ZIP"
+  - Распакуйте архив в удобную папку
+
+#### Шаг 2: Установка Python
+
+1. **Скачайте Python 3.10 или новее**:
+   - Перейдите на [официальный сайт Python](https://www.python.org/downloads/)
+   - Скачайте последнюю версию для Windows
+   - **ВАЖНО**: При установке обязательно поставьте галочку "Add Python to PATH"
+
+2. **Проверьте установку**:
+   ```cmd
+   python --version
+   pip --version
+   ```
+   Должны отобразиться версии Python и pip.
+
+#### Шаг 3: Загрузка исходного кода
+
 ```bash
+# Клонирование репозитория
 git clone https://github.com/Jawerka/image-tag-editor.git
 cd image-tag-editor
 ```
 
-3. Создайте виртуальное окружение:
-```bash
+#### Шаг 4: Создание виртуального окружения
+
+Виртуальное окружение изолирует зависимости проекта от системного Python.
+
+**Для Windows (cmd):**
+```cmd
+# Создание виртуального окружения
 python -m venv venv
-venv\Scripts\activate  # для Windows
+
+# Активация окружения
+venv\Scripts\activate
+
+# Проверка активации (должен появиться (venv) в начале строки)
 ```
 
-4. Установите зависимости:
+**Для Windows (PowerShell):**
+```powershell
+# Создание виртуального окружения
+python -m venv venv
+
+# Активация окружения
+venv\Scripts\Activate.ps1
+
+# Если возникает ошибка ExecutionPolicy, выполните:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+**Для Linux/macOS:**
 ```bash
+# Создание виртуального окружения
+python3 -m venv venv
+
+# Активация окружения
+source venv/bin/activate
+```
+
+#### Шаг 5: Установка зависимостей
+
+После активации виртуального окружения установите необходимые модули:
+
+```bash
+# Обновление pip до последней версии
+python -m pip install --upgrade pip
+
+# Установка зависимостей из requirements.txt
 pip install -r requirements.txt
+
+# Проверка установленных пакетов
+pip list
 ```
 
-5. Запустите:
+**Основные зависимости проекта:**
+- `PyQt6` - графический интерфейс
+- `pandas` - обработка данных
+- `numpy` - математические операции
+- `pyinstaller` - сборка в exe файл
+
+#### Шаг 6: Запуск приложения из окружения
+
 ```bash
+# Убедитесь, что виртуальное окружение активно (видна приставка (venv))
+# Запуск основного скрипта
 python main.py
 ```
 
-### Сборка в exe файл
+#### Шаг 7: Сборка исполняемого файла
 
 ```bash
+# Установка PyInstaller (если не установлен)
 pip install pyinstaller
+
+# Сборка приложения в exe файл
 pyinstaller ImageTagEditor.spec
+
+# Готовый exe файл появится в папке dist/
+dir dist
 ```
 
-Готовый файл появится в папке `dist/`.
+#### Деактивация виртуального окружения
+
+После завершения работы деактивируйте окружение:
+
+```bash
+deactivate
+```
+
+#### Возможные проблемы и решения
+
+**Проблема**: `python` не распознается как команда
+**Решение**: Переустановите Python с галочкой "Add Python to PATH" или добавьте Python в PATH вручную.
+
+**Проблема**: Ошибка при установке PyQt6
+**Решение**: 
+```bash
+pip install --upgrade pip setuptools wheel
+pip install PyQt6 --no-cache-dir
+```
+
+**Проблема**: Ошибка ExecutionPolicy в PowerShell
+**Решение**:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+**Проблема**: Модуль не найден при запуске
+**Решение**: Убедитесь, что виртуальное окружение активировано (видна приставка `(venv)`).
+
+#### Структура проекта после установки
+
+```
+image-tag-editor/
+├── venv/                    # Виртуальное окружение (создается автоматически)
+│   ├── Scripts/            # Исполняемые файлы (Windows)
+│   ├── Lib/               # Установленные пакеты
+│   └── pyvenv.cfg         # Конфигурация окружения
+├── main.py                 # Основной файл программы
+├── requirements.txt        # Список зависимостей  
+├── ImageTagEditor.spec     # Спецификация для PyInstaller
+├── icon.ico               # Иконка программы
+├── dist/                  # Папка с собранным exe (после сборки)
+├── build/                 # Временные файлы сборки
+└── README.md              # Документация
+```
+
+#### Полезные команды для разработки
+
+```bash
+# Обновление всех пакетов
+pip list --outdated
+pip install --upgrade package_name
+
+# Создание нового requirements.txt
+pip freeze > requirements.txt
+
+# Очистка кэша pip
+pip cache purge
+
+# Запуск тестов (если есть)
+python -m pytest test_functions.py
+
+# Проверка кода на ошибки
+python -m py_compile main.py
+```
 
 </details>
 
