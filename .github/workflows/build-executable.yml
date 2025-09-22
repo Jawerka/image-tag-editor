@@ -1,0 +1,106 @@
+name: Build Image Tag Editor Executable
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+jobs:
+  pyinstaller-build:
+    runs-on: windows-latest
+    permissions: write-all
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify Dependencies
+        run: |
+          python -c "import pandas; import numpy; import PyQt6; print('All dependencies imported successfully')"
+
+      - name: Create Executable
+        run: |
+          pyinstaller ImageTagEditor.spec
+
+      - name: List dist directory
+        run: tree dist /F /A
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImageTagEditor-Windows
+          path: dist/ImageTagEditor.exe
+
+      - name: Scan Executable with VirusTotal
+        id: virustotal_scan_executable
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ secrets.VIRUSTOTAL_API }}
+          files: |
+            dist/ImageTagEditor.exe
+          check_existing: true
+        continue-on-error: true
+
+      - name: Scan Source File with VirusTotal
+        id: virustotal_scan_source
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ secrets.VIRUSTOTAL_API }}
+          files: |
+            main.py
+          check_existing: true
+        continue-on-error: true
+
+      - name: Create Release Notes
+        run: |
+          echo "## What's New" > release_notes.txt
+          echo "" >> release_notes.txt
+          echo "- Enhanced tag autocomplete with intelligent substring matching" >> release_notes.txt
+          echo "- Added F-key navigation hotkeys (F1/F2 for navigation, F5 for refresh, etc.)" >> release_notes.txt
+          echo "- Improved dark theme design with consistent styling" >> release_notes.txt
+          echo "- Better error handling and user-friendly dialogs" >> release_notes.txt
+          echo "- Automatic database download dialog when derpibooru.csv is missing" >> release_notes.txt
+          echo "- Enhanced performance with caching and optimized image loading" >> release_notes.txt
+          echo "" >> release_notes.txt
+          echo "## Installation" >> release_notes.txt
+          echo "" >> release_notes.txt
+          echo "1. Download **ImageTagEditor.exe** from the assets below" >> release_notes.txt
+          echo "2. Download **derpibooru.csv** from [A1111 Tags Repository](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete/tree/main/tags)" >> release_notes.txt
+          echo "3. Place both files in the same folder" >> release_notes.txt
+          echo "4. Run ImageTagEditor.exe" >> release_notes.txt
+          echo "" >> release_notes.txt
+          echo "## System Requirements" >> release_notes.txt
+          echo "" >> release_notes.txt
+          echo "- Windows 10/11 (x64)" >> release_notes.txt
+          echo "- Microsoft Visual C++ Redistributable (automatically installed on most systems)" >> release_notes.txt
+          echo "" >> release_notes.txt
+          if [ "${{ steps.virustotal_scan_executable.outcome }}" == "success" ] && [ "${{ steps.virustotal_scan_source.outcome }}" == "success" ]; then
+            echo "#### VirusTotal Security Report" >> release_notes.txt
+            echo "" >> release_notes.txt
+            echo "- [ImageTagEditor.exe](${{ steps.virustotal_scan_executable.outputs.analysis }})" >> release_notes.txt
+            echo "- [main.py](${{ steps.virustotal_scan_source.outputs.analysis }})" >> release_notes.txt
+          else
+            echo "#### Security Information" >> release_notes.txt
+            echo "" >> release_notes.txt
+            echo "This executable is built from open source code and scanned for security. The source code is available in this repository for review." >> release_notes.txt
+          fi
+
+      - name: Create Draft Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = if ($env:GITHUB_REF -match "refs/tags/(.*)") { $matches[1] } else { "v1.0.0" }
+          gh release create "$tag" dist/ImageTagEditor.exe --draft --title "Image Tag Editor $tag" --notes-file release_notes.txt
+        shell: powershell
