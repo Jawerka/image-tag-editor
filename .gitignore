@@ -160,7 +160,7 @@ Thumbs.db
 temp/
 tmp/
 
-# Image files (for testing)
+# Image files (for testing, but keep assets folder)
 *.png
 *.jpg
 *.jpeg
@@ -168,3 +168,7 @@ tmp/
 *.bmp
 *.webp
 *.txt
+
+# Include assets folder with screenshots and documentation
+!assets/
+!assets/**
