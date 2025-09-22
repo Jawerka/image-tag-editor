@@ -1,0 +1,31 @@
+# Image Tag Editor - Python Dependencies
+# Professional image tagging application optimized for Windows 10/11
+
+# Core GUI Framework (Qt6-based for modern Windows compatibility)
+PyQt6>=6.6.0
+
+# Data Processing (CSV reading and tag management)
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Python Standard Library Dependencies
+# These are included with Python but listed for documentation:
+# pathlib - included in Python 3.4+
+# typing - included in Python 3.5+
+# logging - included in Python standard library
+# sys - included in Python standard library
+# difflib - included in Python standard library
+# webbrowser - included in Python standard library
+
+# Development dependencies (optional, uncomment if needed)
+# black>=23.0.0
+# flake8>=6.0.0
+# mypy>=1.0.0
+
+# Build dependencies (for creating executable files)
+pyinstaller>=6.0.0
+Pillow>=10.0.0
+
+# Runtime optimizations (Windows-specific)
+# These may help with performance on Windows 10/11
+setuptools>=68.0.0

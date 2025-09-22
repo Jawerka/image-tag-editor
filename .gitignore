@@ -169,6 +169,9 @@ tmp/
 *.webp
 *.txt
 
+# Include important project files
+!requirements.txt
+
 # Include assets folder with screenshots and documentation
 !assets/
 !assets/**
