@@ -44,6 +44,7 @@ from __future__ import annotations
 from pathlib import Path
 import logging
 import sys
+import argparse
 from typing import List, Optional
 
 import difflib
@@ -1286,15 +1287,73 @@ class TagAutoCompleteApp(QMainWindow):
         return super().resizeEvent(event)
 
 
+# --------------------------- Парсинг аргументов командной строки -----------------------------------
+
+def parse_args() -> argparse.Namespace:
+    """Парсинг аргументов командной строки для поддержки открытия файлов изображений.
+    
+    Поддерживает:
+    - Открытие одного или нескольких файлов изображений
+    - Работу в качестве программы по умолчанию в Windows
+    """
+    parser = argparse.ArgumentParser(
+        description="Image Tag Editor - Professional image tagging application",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py                           # Запуск без файлов
+  python main.py image.jpg                 # Открыть конкретный файл
+  python main.py "C:\\Photos\\photo.png"   # Открыть файл по полному пути
+  
+Supported formats: PNG, JPG, JPEG, WEBP, GIF, BMP
+        """
+    )
+    
+    parser.add_argument(
+        "image_file",
+        nargs="?",
+        help="Путь к файлу изображения для открытия"
+    )
+    
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="Image Tag Editor v1.0.0"
+    )
+    
+    return parser.parse_args()
+
+
 # --------------------------- Точка входа -----------------------------------
 
 def main() -> None:
+    """Основная функция запуска приложения с поддержкой аргументов командной строки."""
     logger.info("Starting TagAutoCompleteApp")
+    
+    # Парсинг аргументов командной строки
+    args = parse_args()
+    
     try:
         app = QApplication(sys.argv)
         app.setStyle("Fusion")
         window = TagAutoCompleteApp()
         window.show()
+        
+        # Если передан путь к изображению, загружаем его после отображения окна
+        if args.image_file:
+            image_path = Path(args.image_file)
+            if image_path.exists() and image_path.suffix.lower() in IMAGE_EXTENSIONS:
+                logger.info("Loading image from command line argument: %s", image_path)
+                # Используем QTimer.singleShot для загрузки изображения после полной инициализации UI
+                QTimer.singleShot(100, lambda: window.load_image_from_path(str(image_path)))
+            else:
+                if not image_path.exists():
+                    logger.error("Image file not found: %s", image_path)
+                    window.show_status(f"Image file not found: {image_path}", 5000)
+                else:
+                    logger.error("Unsupported image format: %s", image_path.suffix)
+                    window.show_status(f"Unsupported image format: {image_path.suffix}", 5000)
+        
         sys.exit(app.exec())
     except ImportError as e:
         if "PyQt6" in str(e):
