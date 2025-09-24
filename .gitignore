@@ -1,8 +1,8 @@
-dist
-build
-main.build
-main.dist
-main.onefile-build
+# Build and dist directories
+dist/
+main.build/
+main.dist/
+main.onefile-build/
 ImageTagEditor-Nuitka-Fixed.exe
 
 # Byte-compiled / optimized / DLL files
@@ -15,9 +15,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -39,8 +37,10 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 
-# Include our specific spec file
-!ImageTagEditor.spec
+# Keep build directory with spec files but exclude its contents
+build/*
+!build/*.spec
+!build/*.py
 
 # Installer logs
 pip-log.txt

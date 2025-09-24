@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "export_date": "2025-09-24T22:01:09.320752",
+  "macros": [
+    {
+      "name": "dash",
+      "tags": "rd, safe, cute, safe",
+      "description": "",
+      "created_date": "2025-09-24T21:02:51.692789",
+      "last_used": "2025-09-24T21:09:47.857606",
+      "use_count": 2,
+      "hotkey": "",
+      "category": "General"
+    },
+    {
+      "name": "eeee",
+      "tags": "eeeee, safe, test, newdd,d, test, new",
+      "description": "",
+      "created_date": "2025-09-24T21:09:58.525431",
+      "last_used": "",
+      "use_count": 0,
+      "hotkey": "",
+      "category": "General"
+    }
+  ]
+}

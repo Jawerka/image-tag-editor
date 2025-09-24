@@ -84,7 +84,15 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
+# Import macro system
+try:
+    from macro_system import MacroManager, MacroDropdown
+    MACRO_SYSTEM_AVAILABLE = True
+except ImportError as e:
+    MACRO_SYSTEM_AVAILABLE = False
+
 # --------------------------- Константы конфигурации ---------------------------
+DEBUG_MODE = True  # Включить подробное логирование и дополнительные проверки
 MIN_SUGGESTIONS = 1
 MAX_SUGGESTIONS = 5
 DEBOUNCE_MS = 150
@@ -106,18 +114,159 @@ QStatusBar { color: #ffffff; background-color: #3c3f41; }
 """
 
 
-# --------------------------- Логирование -------------------------------------
-logger = logging.getLogger("TagAutoComplete")
-logger.setLevel(logging.DEBUG)
-file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
-file_handler.setLevel(logging.DEBUG)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-file_handler.setFormatter(formatter)
-console_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+# --------------------------- Централизованная система логирования -------------------------------------
+import functools
+import traceback
+import time
+from typing import Any, Callable, TypeVar
+
+F = TypeVar('F', bound=Callable[..., Any])
+
+class DetailedLogger:
+    """Централизованная система логирования с поддержкой DEBUG_MODE."""
+    
+    def __init__(self, name: str, debug_mode: bool = False):
+        self.logger = logging.getLogger(name)
+        self.debug_mode = debug_mode
+        self._setup_logger()
+    
+    def _setup_logger(self):
+        """Настроить логгер с соответствующими уровнями."""
+        # Очищаем существующие обработчики
+        self.logger.handlers.clear()
+        
+        # Устанавливаем уровень логирования
+        if self.debug_mode:
+            self.logger.setLevel(logging.DEBUG)
+            console_level = logging.DEBUG
+        else:
+            self.logger.setLevel(logging.INFO)
+            console_level = logging.INFO
+        
+        # Файловый обработчик (всегда DEBUG для полного лога)
+        file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+        file_handler.setLevel(logging.DEBUG)
+        
+        # Консольный обработчик
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(console_level)
+        
+        # Форматтер
+        if self.debug_mode:
+            formatter = logging.Formatter(
+                "%(asctime)s [%(levelname)8s] %(name)s.%(funcName)s:%(lineno)d - %(message)s"
+            )
+        else:
+            formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+        
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+        
+        self.logger.addHandler(file_handler)
+        self.logger.addHandler(console_handler)
+    
+    def debug(self, msg: str, *args, **kwargs):
+        """Отладочное сообщение (только в DEBUG_MODE)."""
+        if self.debug_mode:
+            self.logger.debug(msg, *args, **kwargs)
+    
+    def info(self, msg: str, *args, **kwargs):
+        """Информационное сообщение."""
+        self.logger.info(msg, *args, **kwargs)
+    
+    def warning(self, msg: str, *args, **kwargs):
+        """Предупреждение."""
+        self.logger.warning(msg, *args, **kwargs)
+    
+    def error(self, msg: str, *args, **kwargs):
+        """Ошибка."""
+        self.logger.error(msg, *args, **kwargs)
+    
+    def exception(self, msg: str, *args, **kwargs):
+        """Ошибка с трассировкой."""
+        self.logger.exception(msg, *args, **kwargs)
+    
+    def user_action(self, action: str, **details):
+        """Логирование действий пользователя."""
+        if self.debug_mode:
+            detail_str = ", ".join(f"{k}={v}" for k, v in details.items())
+            self.info(f"USER_ACTION: {action} [{detail_str}]")
+        else:
+            self.info(f"USER_ACTION: {action}")
+    
+    def performance(self, operation: str, duration: float, **details):
+        """Логирование производительности."""
+        if self.debug_mode:
+            detail_str = ", ".join(f"{k}={v}" for k, v in details.items())
+            self.debug(f"PERFORMANCE: {operation} took {duration:.3f}s [{detail_str}]")
+
+# Создаем глобальный логгер
+logger = DetailedLogger("TagAutoComplete", DEBUG_MODE)
+
+def log_user_action(action_name: str = None):
+    """Декоратор для логирования действий пользователя."""
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Определяем имя действия
+            if action_name:
+                action = action_name
+            else:
+                action = func.__name__
+            
+            # Собираем контекст
+            start_time = time.time()
+            context = {}
+            
+            # Если это метод класса, добавляем информацию об объекте
+            if args and hasattr(args[0], '__class__'):
+                context['class'] = args[0].__class__.__name__
+            
+            try:
+                # Логируем начало действия
+                logger.user_action(f"{action} STARTED", **context)
+                
+                # Выполняем функцию
+                result = func(*args, **kwargs)
+                
+                # Логируем успешное завершение
+                duration = time.time() - start_time
+                logger.user_action(f"{action} COMPLETED", duration=f"{duration:.3f}s", **context)
+                logger.performance(action, duration, **context)
+                
+                return result
+                
+            except Exception as e:
+                # Логируем ошибку
+                duration = time.time() - start_time
+                logger.error(f"USER_ACTION: {action} FAILED after {duration:.3f}s - {str(e)}")
+                
+                if DEBUG_MODE:
+                    logger.exception(f"Detailed error in {action}")
+                
+                # Показываем пользователю ошибку (если доступен объект приложения)
+                if args and hasattr(args[0], 'show_status'):
+                    args[0].show_status(f"Ошибка в {action}: {str(e)}", 5000)
+                
+                raise
+        
+        return wrapper
+    return decorator
+
+def safe_execute(operation_name: str, default_return=None):
+    """Декоратор для безопасного выполнения операций с обработкой ошибок."""
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                logger.error(f"SAFE_EXECUTE: {operation_name} failed - {str(e)}")
+                if DEBUG_MODE:
+                    logger.exception(f"Detailed error in {operation_name}")
+                return default_return
+        return wrapper
+    return decorator
 
 
 # --------------------------- Виджеты ----------------------------------------
@@ -312,7 +461,8 @@ class ClickOutsideFilter(QObject):
                     self.window.suggestions_list.mapFromGlobal(global_pos)
                 )
                 if not inside_input and not inside_suggestions:
-                    logger.debug("Click outside detected: hiding suggestions")
+                    if DEBUG_MODE:
+                        logger.debug("Click outside detected: hiding suggestions")
                     self.window.hide_suggestions()
         return super().eventFilter(watched, event)
 
@@ -349,9 +499,9 @@ class TagAutoCompleteApp(QMainWindow):
         self.setWindowTitle("Image Tag Editor")
         self.resize(1200, 720)
         
-        # Установка иконки для окна, заголовка и панели задач
+# Установка иконки для окна, заголовка и панели задач
         try:
-            icon_path = Path("icon.ico")
+            icon_path = Path("assets/icon.ico")
             if icon_path.exists():
                 icon = QIcon(str(icon_path))
                 self.setWindowIcon(icon)
@@ -380,6 +530,11 @@ class TagAutoCompleteApp(QMainWindow):
 
         # хранение оригинального QPixmap для корректного ресайза
         self._original_pixmap: Optional[QPixmap] = None
+
+        # ----- Macro System -----
+        self.macro_manager = None
+        self.macro_dropdown = None
+        self._setup_macro_system()
 
         # ----- UI -----
         self._create_widgets()
@@ -484,6 +639,26 @@ class TagAutoCompleteApp(QMainWindow):
         QShortcut(QKeySequence("F9"), self, activated=self.save_tags)
         QShortcut(QKeySequence("F12"), self, activated=self.focus_input)
 
+    # ---------------- Macro System Setup ----------------
+    def _setup_macro_system(self) -> None:
+        """Initialize the macro system if available."""
+        if not MACRO_SYSTEM_AVAILABLE:
+            logger.info("Macro system not available, skipping initialization")
+            return
+        
+        try:
+            # Initialize macro manager
+            self.macro_manager = MacroManager(self)
+            
+            # Create macro dropdown (will be added to layout later)
+            self.macro_dropdown = MacroDropdown(self.macro_manager, self)
+            
+            logger.info("Macro system initialized successfully")
+        except Exception as e:
+            logger.exception("Failed to initialize macro system: %s", e)
+            self.macro_manager = None
+            self.macro_dropdown = None
+
     # ---------------- UI: компоновка ----------------
     def _setup_layouts(self) -> None:
         main_widget = QWidget(self)
@@ -505,9 +680,19 @@ class TagAutoCompleteApp(QMainWindow):
 
         # Правая панель — теги и подсказки
         right_panel = QVBoxLayout()
+        
+        # Top row: Tags label and macro dropdown
+        tags_header = QHBoxLayout()
         tags_label = QLabel("Tags:")
         tags_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
-        right_panel.addWidget(tags_label)
+        tags_header.addWidget(tags_label)
+        tags_header.addStretch()
+        
+        # Add macro dropdown if available
+        if self.macro_dropdown:
+            tags_header.addWidget(self.macro_dropdown)
+        
+        right_panel.addLayout(tags_header)
         right_panel.addWidget(self.tag_input, 2)
         right_panel.addWidget(self.suggestions_label)
         right_panel.addWidget(self.suggestions_list)
@@ -616,7 +801,7 @@ class TagAutoCompleteApp(QMainWindow):
         self.suggestion_timer.timeout.connect(self.update_suggestions)
         self.suggestions_list.itemClicked.connect(lambda item: self.select_suggestion(item))
         self.suggestions_list.itemSelected.connect(self.select_suggestion)
-        self.save_button.clicked.connect(self.save_tags)
+        self.save_button.clicked.connect(lambda: self.save_tags())
 
         # клики по изображению
         self.image_label.clicked.connect(self.load_image)
@@ -630,8 +815,12 @@ class TagAutoCompleteApp(QMainWindow):
         self.tag_input.textChanged.connect(self.on_text_cache_changed)
 
         # навигация
-        self.left_btn.clicked.connect(self.show_prev_image)
-        self.right_btn.clicked.connect(self.show_next_image)
+        self.left_btn.clicked.connect(lambda: self.show_prev_image())
+        self.right_btn.clicked.connect(lambda: self.show_next_image())
+        
+        # macro system connections
+        if self.macro_dropdown:
+            self.macro_dropdown.macro_selected.connect(self.execute_macro)
 
     # ---------------- Подсказки ----------------
     def on_text_changed(self) -> None:
@@ -873,7 +1062,8 @@ class TagAutoCompleteApp(QMainWindow):
         """
         self.suggestions_list.clear()
         # не прячем сам контейнер — он всегда должен быть там
-        logger.debug("Cleared suggestions (container kept visible)")
+        if DEBUG_MODE:
+            logger.debug("Cleared suggestions (container kept visible)")
 
     def select_suggestion(self, displayed_text_or_item) -> None:
         """Вставить выбранный тег в текущую позицию курсора.
@@ -1018,7 +1208,66 @@ class TagAutoCompleteApp(QMainWindow):
         else:
             self.show_status("No image to refresh", 2000)
 
+    def execute_macro(self, macro_name: str, macro_tags: str) -> None:
+        """Execute a macro by inserting its tags into the input field.
+        
+        Args:
+            macro_name: Name of the executed macro
+            macro_tags: Comma-separated string of tags to insert
+        """
+        if not macro_tags.strip():
+            logger.warning("Attempted to execute macro '%s' with empty tags", macro_name)
+            return
+        
+        # Get current text and cursor position
+        current_text = self.tag_input.toPlainText()
+        cursor = self.tag_input.textCursor()
+        cursor_pos = cursor.position()
+        
+        # Convert macro tags from storage format to display format
+        macro_tag_list = [tag.strip() for tag in macro_tags.split(',') if tag.strip()]
+        display_tags = [self.convert_tag_for_display(tag) for tag in macro_tag_list]
+        
+        # Determine insertion strategy based on current text
+        if not current_text.strip():
+            # Empty field - just insert the macro tags
+            new_text = ', '.join(display_tags)
+            new_cursor_pos = len(new_text)
+        else:
+            # Field has content - append with appropriate separator
+            if current_text.rstrip().endswith(','):
+                # Already has comma at end
+                separator = " "
+            elif current_text.rstrip().endswith(' '):
+                # Has space at end - add comma
+                separator = ", "
+            else:
+                # Need to add comma separator
+                separator = ", "
+            
+            # Insert at end with separator
+            new_text = current_text + separator + ', '.join(display_tags)
+            new_cursor_pos = len(new_text)
+        
+        # Apply the new text
+        self.tag_input.setPlainText(new_text)
+        
+        # Set cursor to end of inserted text
+        new_cursor = self.tag_input.textCursor()
+        new_cursor.setPosition(new_cursor_pos)
+        self.tag_input.setTextCursor(new_cursor)
+        
+        # Focus the input field
+        self.tag_input.setFocus()
+        
+        # Show status message
+        tag_count = len(display_tags)
+        self.show_status(f"Macro '{macro_name}' executed: {tag_count} tags inserted", 3000)
+        
+        logger.info("Executed macro '%s': inserted %d tags", macro_name, tag_count)
+
     # ---------------- Работа с изображениями ----------------
+    @log_user_action("Open Image Dialog")
     def load_image(self) -> None:
         """Открыть диалог выбора изображения и загрузить файл.
 
@@ -1032,9 +1281,11 @@ class TagAutoCompleteApp(QMainWindow):
             "Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp)",
         )
         if not file_path:
+            logger.user_action("Open Image Dialog CANCELLED")
             return
         self.load_image_from_path(file_path)
 
+    @log_user_action("Load Image")
     def load_image_from_path(self, file_path: str) -> None:
         """Загрузить изображение по пути: обновить превью, список изображений и теги.
 
@@ -1202,17 +1453,29 @@ class TagAutoCompleteApp(QMainWindow):
         self.update_nav_buttons()
         logger.info("Switched to image %d: %s", self.current_index, self.current_image_path)
 
+    @log_user_action("Navigate Next Image")
     def show_next_image(self) -> None:
         if self.current_index is None or not self.image_list:
+            logger.debug("Navigation blocked: no image list or current index")
             return
         if self.current_index < len(self.image_list) - 1:
-            self.show_image_by_index(self.current_index + 1)
+            next_index = self.current_index + 1
+            logger.debug(f"Navigating to next image: {next_index + 1}/{len(self.image_list)}")
+            self.show_image_by_index(next_index)
+        else:
+            logger.debug("Navigation blocked: already at last image")
 
+    @log_user_action("Navigate Previous Image")
     def show_prev_image(self) -> None:
         if self.current_index is None or not self.image_list:
+            logger.debug("Navigation blocked: no image list or current index")
             return
         if self.current_index > 0:
-            self.show_image_by_index(self.current_index - 1)
+            prev_index = self.current_index - 1
+            logger.debug(f"Navigating to previous image: {prev_index + 1}/{len(self.image_list)}")
+            self.show_image_by_index(prev_index)
+        else:
+            logger.debug("Navigation blocked: already at first image")
 
     def update_nav_buttons(self) -> None:
         if self.image_list and self.current_index is not None:
@@ -1269,12 +1532,21 @@ class TagAutoCompleteApp(QMainWindow):
         cursor.movePosition(cursor.MoveOperation.End)
         self.tag_input.setTextCursor(cursor)
 
+    @log_user_action("Save Tags")
     def save_tags(self) -> None:
         if not self.current_image_path:
+            logger.warning("Attempted to save tags without loaded image")
             self.show_status("No image loaded to save tags for", 3000)
             return
+        
         tags = self.tag_input.toPlainText().strip()
         txt_path = self.current_image_path.with_suffix(".txt")
+        
+        # Логируем детали операции в дебаг-режиме
+        if DEBUG_MODE:
+            tag_count = len([tag.strip() for tag in tags.split(',') if tag.strip()])
+            logger.debug(f"Saving {tag_count} tags to {txt_path}")
+        
         try:
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(tags)
@@ -1425,7 +1697,7 @@ Supported formats: PNG, JPG, JPEG, WEBP, GIF, BMP
     parser.add_argument(
         "--version",
         action="version",
-        version="Image Tag Editor v1.0.0"
+        version="Image Tag Editor v1.2.0"
     )
     
     return parser.parse_args()

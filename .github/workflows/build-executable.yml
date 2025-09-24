@@ -32,7 +32,7 @@ jobs:
 
       - name: Create Executable
         run: |
-          pyinstaller ImageTagEditor.spec
+          pyinstaller build/ImageTagEditor.spec
 
       - name: List dist directory
         run: tree dist /F /A
@@ -58,7 +58,7 @@ jobs:
         with:
           vt_api_key: ${{ secrets.VIRUSTOTAL_API }}
           files: |
-            main.py
+            src/main.py
         continue-on-error: true
 
       - name: Create Release Notes
@@ -106,6 +106,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = if ($env:GITHUB_REF -match "refs/tags/(.*)") { $matches[1] } else { "v1.1.0" }
+          $tag = if ($env:GITHUB_REF -match "refs/tags/(.*)") { $matches[1] } else { "v1.2.0" }
           gh release create "$tag" dist/ImageTagEditor.exe --draft --title "Image Tag Editor $tag" --notes-file release_notes.txt
         shell: powershell

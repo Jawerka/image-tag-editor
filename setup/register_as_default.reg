@@ -1,0 +1,100 @@
+Windows Registry Editor Version 5.00
+
+; Image Tag Editor - Registry file for Windows default program registration
+; This file registers Image Tag Editor as a handler for image files in Windows
+; 
+; ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ:
+; 1. Убедитесь, что ImageTagEditor.exe находится в папке C:\Program Files\ImageTagEditor\
+; 2. Если программа в другой папке, отредактируйте пути в этом файле
+; 3. Щелкните правой кнопкой по этому файлу и выберите "Слияние"
+; 4. Подтвердите изменения в реестре
+; 5. Теперь можете назначить Image Tag Editor программой по умолчанию через Windows Settings
+
+; Регистрация приложения Image Tag Editor
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\ImageTagEditor.exe]
+@="C:\\Program Files\\ImageTagEditor\\ImageTagEditor.exe"
+"Path"="C:\\Program Files\\ImageTagEditor"
+
+; Регистрация программы в списке приложений
+[HKEY_LOCAL_MACHINE\SOFTWARE\RegisteredApplications]
+"Image Tag Editor"="SOFTWARE\\ImageTagEditor\\Capabilities"
+
+; Возможности программы Image Tag Editor
+[HKEY_LOCAL_MACHINE\SOFTWARE\ImageTagEditor]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\ImageTagEditor\Capabilities]
+"ApplicationDescription"="Professional image tagging application with intelligent autocomplete"
+"ApplicationName"="Image Tag Editor"
+
+; Ассоциации файлов
+[HKEY_LOCAL_MACHINE\SOFTWARE\ImageTagEditor\Capabilities\FileAssociations]
+".png"="ImageTagEditor.Image"
+".jpg"="ImageTagEditor.Image"
+".jpeg"="ImageTagEditor.Image"
+".bmp"="ImageTagEditor.Image"
+".gif"="ImageTagEditor.Image"
+".webp"="ImageTagEditor.Image"
+
+; Регистрация класса файлов ImageTagEditor.Image
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\ImageTagEditor.Image]
+@="Image Tag Editor Image File"
+"FriendlyTypeName"="Image Tag Editor Image File"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\ImageTagEditor.Image\DefaultIcon]
+@="C:\\Program Files\\ImageTagEditor\\ImageTagEditor.exe,0"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\ImageTagEditor.Image\shell]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\ImageTagEditor.Image\shell\open]
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\ImageTagEditor.Image\shell\open\command]
+@="\"C:\\Program Files\\ImageTagEditor\\ImageTagEditor.exe\" \"%1\""
+
+; Дополнительные команды контекстного меню
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\ImageTagEditor.Image\shell\edit]
+@="Редактировать теги"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\ImageTagEditor.Image\shell\edit\command]
+@="\"C:\\Program Files\\ImageTagEditor\\ImageTagEditor.exe\" \"%1\""
+
+; Регистрация для текущего пользователя (альтернативный вариант без прав администратора)
+[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\ImageTagEditor.exe]
+@="C:\\Program Files\\ImageTagEditor\\ImageTagEditor.exe"
+"Path"="C:\\Program Files\\ImageTagEditor"
+
+[HKEY_CURRENT_USER\SOFTWARE\RegisteredApplications]
+"Image Tag Editor"="SOFTWARE\\ImageTagEditor\\Capabilities"
+
+[HKEY_CURRENT_USER\SOFTWARE\ImageTagEditor]
+
+[HKEY_CURRENT_USER\SOFTWARE\ImageTagEditor\Capabilities]
+"ApplicationDescription"="Professional image tagging application with intelligent autocomplete"
+"ApplicationName"="Image Tag Editor"
+
+[HKEY_CURRENT_USER\SOFTWARE\ImageTagEditor\Capabilities\FileAssociations]
+".png"="ImageTagEditor.Image"
+".jpg"="ImageTagEditor.Image"
+".jpeg"="ImageTagEditor.Image"
+".bmp"="ImageTagEditor.Image"
+".gif"="ImageTagEditor.Image"
+".webp"="ImageTagEditor.Image"
+
+[HKEY_CURRENT_USER\SOFTWARE\Classes\ImageTagEditor.Image]
+@="Image Tag Editor Image File"
+"FriendlyTypeName"="Image Tag Editor Image File"
+
+[HKEY_CURRENT_USER\SOFTWARE\Classes\ImageTagEditor.Image\DefaultIcon]
+@="C:\\Program Files\\ImageTagEditor\\ImageTagEditor.exe,0"
+
+[HKEY_CURRENT_USER\SOFTWARE\Classes\ImageTagEditor.Image\shell]
+
+[HKEY_CURRENT_USER\SOFTWARE\Classes\ImageTagEditor.Image\shell\open]
+
+[HKEY_CURRENT_USER\SOFTWARE\Classes\ImageTagEditor.Image\shell\open\command]
+@="\"C:\\Program Files\\ImageTagEditor\\ImageTagEditor.exe\" \"%1\""
+
+[HKEY_CURRENT_USER\SOFTWARE\Classes\ImageTagEditor.Image\shell\edit]
+@="Редактировать теги"
+
+[HKEY_CURRENT_USER\SOFTWARE\Classes\ImageTagEditor.Image\shell\edit\command]
+@="\"C:\\Program Files\\ImageTagEditor\\ImageTagEditor.exe\" \"%1\""

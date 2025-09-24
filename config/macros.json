@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "last_saved": "2025-09-24T22:34:39.793067",
+  "macros": [
+    {
+      "name": "New Macro",
+      "tags": "rd, safe",
+      "description": "",
+      "created_date": "2025-09-24T22:13:16.813519",
+      "last_used": "",
+      "use_count": 0,
+      "hotkey": "",
+      "category": "General"
+    },
+    {
+      "name": "New Macro Copy",
+      "tags": "rd,s",
+      "description": "",
+      "created_date": "2025-09-24T22:13:25.848919",
+      "last_used": "",
+      "use_count": 0,
+      "hotkey": "",
+      "category": "General"
+    }
+  ]
+}
