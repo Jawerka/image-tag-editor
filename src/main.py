@@ -96,9 +96,9 @@ except ImportError as e:
     MACRO_SYSTEM_AVAILABLE = False
 
 # --------------------------- Константы конфигурации ---------------------------
-DEBUG_MODE = True  # Включить подробное логирование и дополнительные проверки
+DEBUG_MODE = False  # Включить подробное логирование и дополнительные проверки
 MIN_SUGGESTIONS = 1
-MAX_SUGGESTIONS = 5
+MAX_SUGGESTIONS = 7
 DEBOUNCE_MS = 150
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 LOG_FILE = "app.log"
@@ -144,12 +144,16 @@ class DetailedLogger:
             self.logger.setLevel(logging.DEBUG)
             console_level = logging.DEBUG
         else:
-            self.logger.setLevel(logging.INFO)
-            console_level = logging.INFO
+            self.logger.setLevel(logging.WARN)
+            console_level = logging.WARN
         
-        # Файловый обработчик (всегда DEBUG для полного лога)
+        # Файловый обработчик
         file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
-        file_handler.setLevel(logging.DEBUG)
+
+        if self.debug_mode:
+            file_handler.setLevel(logging.DEBUG)
+        else:
+            file_handler.setLevel(logging.WARN)
         
         # Консольный обработчик
         console_handler = logging.StreamHandler()

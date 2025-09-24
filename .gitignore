@@ -4,6 +4,8 @@ main.build/
 main.dist/
 main.onefile-build/
 ImageTagEditor-Nuitka-Fixed.exe
+macros.json
+macros.json.bak
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
