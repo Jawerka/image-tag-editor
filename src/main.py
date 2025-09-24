@@ -2000,7 +2000,7 @@ Supported formats: PNG, JPG, JPEG, WEBP, GIF, BMP
     parser.add_argument(
         "--version",
         action="version",
-        version="Image Tag Editor v1.2.0"
+        version="Image Tag Editor v1.3.0"
     )
     
     return parser.parse_args()

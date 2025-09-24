@@ -64,8 +64,18 @@ jobs:
       - name: Create Release Notes
         shell: bash
         run: |
-          echo "## What's New" > release_notes.txt
+          echo "## What's New in v1.3.0" > release_notes.txt
           echo "" >> release_notes.txt
+          echo "### 🎨 NEW: Special Tag Highlighting System" >> release_notes.txt
+          echo "- **Artist: tags** - Blue highlighting (#64B5F6, 40% transparency)" >> release_notes.txt
+          echo "- **OC: tags** - Green highlighting (#81C784, 40% transparency)" >> release_notes.txt
+          echo "- **Quantity tags** (solo, duo, trio, group, crowd) - Yellow highlighting (#FFB74D, 40% transparency)" >> release_notes.txt
+          echo "- **Species tags** (pony, earth pony, pegasus, unicorn, alicorn, bat pony, dragon, etc.) - Purple highlighting (#BA68C8, 40% transparency)" >> release_notes.txt
+          echo "- Real-time highlighting in both input field and suggestions list" >> release_notes.txt
+          echo "- Support for various tag formats (underscores, spaces, plus signs)" >> release_notes.txt
+          echo "- Non-intrusive design with 40% transparency colors" >> release_notes.txt
+          echo "" >> release_notes.txt
+          echo "### 🔧 Previous Improvements" >> release_notes.txt
           echo "- Added comprehensive data validation and debugging tools" >> release_notes.txt
           echo "- Implemented new tag suggestion testing framework" >> release_notes.txt
           echo "- Enhanced development environment with debugging utilities" >> release_notes.txt
@@ -78,6 +88,8 @@ jobs:
           echo "- Better error handling and user-friendly dialogs" >> release_notes.txt
           echo "- Automatic database download dialog when derpibooru.csv is missing" >> release_notes.txt
           echo "- Enhanced performance with caching and optimized image loading" >> release_notes.txt
+          echo "- Added macro system for quick tag insertion" >> release_notes.txt
+          echo "- Improved important tags reordering functionality" >> release_notes.txt
           echo "" >> release_notes.txt
           echo "## Installation" >> release_notes.txt
           echo "" >> release_notes.txt
@@ -106,6 +118,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = if ($env:GITHUB_REF -match "refs/tags/(.*)") { $matches[1] } else { "v1.2.0" }
+          $tag = if ($env:GITHUB_REF -match "refs/tags/(.*)") { $matches[1] } else { "v1.3.0" }
           gh release create "$tag" dist/ImageTagEditor.exe --draft --title "Image Tag Editor $tag" --notes-file release_notes.txt
         shell: powershell
