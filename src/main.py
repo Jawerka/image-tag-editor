@@ -66,6 +66,10 @@ from PyQt6.QtGui import (
     QShortcut,
     QFontMetrics,
     QIcon,
+    QSyntaxHighlighter,
+    QTextDocument,
+    QTextCharFormat,
+    QBrush,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -269,6 +273,115 @@ def safe_execute(operation_name: str, default_return=None):
     return decorator
 
 
+# --------------------------- Система подсветки тегов ----------------------------------------
+
+class TagHighlighter(QSyntaxHighlighter):
+    """Система подсветки специальных тегов в поле ввода.
+    
+    Подсвечивает различные категории тегов разными цветами:
+    - Artist: теги - голубой цвет (#64B5F6 с прозрачностью 40%)
+    - OC: теги - зеленый цвет (#81C784 с прозрачностью 40%)  
+    - Количественные теги (solo, duo, trio) - желтый цвет (#FFB74D с прозрачностью 40%)
+    - Видовые теги (pony, unicorn, etc.) - фиолетовый цвет (#BA68C8 с прозрачностью 40%)
+    """
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_highlight_formats()
+    
+    def _setup_highlight_formats(self):
+        """Настройка форматов подсветки для различных категорий тегов."""
+        
+        # Artist теги - голубой цвет
+        self.artist_format = QTextCharFormat()
+        self.artist_format.setBackground(QBrush(QColor(100, 181, 246, 102)))  # #64B5F6 с 40% прозрачности
+        
+        # OC теги - зеленый цвет
+        self.oc_format = QTextCharFormat()
+        self.oc_format.setBackground(QBrush(QColor(129, 199, 132, 102)))  # #81C784 с 40% прозрачности
+        
+        # Количественные теги - желтый цвет
+        self.quantity_format = QTextCharFormat()
+        self.quantity_format.setBackground(QBrush(QColor(255, 183, 77, 102)))  # #FFB74D с 40% прозрачности
+        
+        # Видовые теги - фиолетовый цвет
+        self.species_format = QTextCharFormat()
+        self.species_format.setBackground(QBrush(QColor(186, 104, 200, 102)))  # #BA68C8 с 40% прозрачности
+        
+        # Определяем видовые теги
+        self.species_tags = {
+            # Основные виды пони
+            'pony', 'earth pony', 'pegasus', 'unicorn', 'alicorn', 'bat pony',
+            # Другие виды
+            'dragon', 'griffon', 'griffin', 'changeling', 'zebra', 'donkey', 'mule',
+            'hippogriff', 'seapony', 'kirin', 'yak', 'buffalo', 'minotaur',
+            # Общие категории
+            'anthro', 'human', 'humanized', 'robot', 'cyborg',
+            # Дополнительные варианты написания
+            'earth_pony', 'bat_pony', 'sea_pony'
+        }
+        
+        # Количественные теги
+        self.quantity_tags = {'solo', 'duo', 'trio', 'group', 'crowd'}
+    
+    def highlightBlock(self, text):
+        """Основная функция подсветки блока текста."""
+        if not text.strip():
+            return
+        
+        # Разбиваем текст на теги по запятым
+        tags = [tag.strip() for tag in text.split(',')]
+        current_pos = 0
+        
+        for tag in tags:
+            if not tag:
+                current_pos = text.find(',', current_pos) + 1
+                continue
+            
+            # Находим позицию тега в тексте
+            tag_start = text.find(tag, current_pos)
+            if tag_start == -1:
+                current_pos = text.find(',', current_pos) + 1
+                continue
+            
+            tag_end = tag_start + len(tag)
+            tag_lower = tag.lower()
+            
+            # Проверяем категории тегов и применяем соответствующий формат
+            if tag_lower.startswith('artist:'):
+                self.setFormat(tag_start, len(tag), self.artist_format)
+            elif tag_lower.startswith('oc:'):
+                self.setFormat(tag_start, len(tag), self.oc_format)
+            elif tag_lower in self.quantity_tags:
+                self.setFormat(tag_start, len(tag), self.quantity_format)
+            elif self._is_species_tag(tag_lower):
+                self.setFormat(tag_start, len(tag), self.species_format)
+            
+            # Переходим к следующему тегу
+            current_pos = text.find(',', tag_end)
+            if current_pos == -1:
+                break
+            current_pos += 1
+    
+    def _is_species_tag(self, tag: str) -> bool:
+        """Проверить, является ли тег видовым."""
+        # Проверяем точное совпадение
+        if tag in self.species_tags:
+            return True
+        
+        # Проверяем варианты с подчеркиваниями и пробелами
+        tag_normalized = tag.replace('_', ' ').replace('+', ' ')
+        if tag_normalized in self.species_tags:
+            return True
+        
+        # Проверяем обратное преобразование
+        tag_with_underscores = tag.replace(' ', '_')
+        if tag_with_underscores in self.species_tags:
+            return True
+        
+        return False
+
+
 # --------------------------- Виджеты ----------------------------------------
 class TagInputTextEdit(QPlainTextEdit):
     """Многострочное поле ввода с сигналами на спец. клавиши.
@@ -370,8 +483,8 @@ class ClickableImageLabel(QLabel):
         # Виджет превью — даём ему резиновую политику размера; фактический минимум будет
         # динамически рассчитываться из размеров главного окна в TagAutoCompleteApp.
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        # Небольшой базовый минимум на случай, если динамика ещё не применена
-        self.setMinimumSize(320, 240)
+        # Более консервативный базовый минимум, чтобы не заставлять окно расти
+        self.setMinimumSize(200, 150)
         # Рамка вокруг превью; уменьшили padding, чтобы картинка могла занять больше площади
         self.setStyleSheet("border: 3px dashed #6b6b6b; border-radius: 12px; padding: 8px; background-clip: padding-box;")
         # Лёгкая рамка, чтобы обозначить область дропа
@@ -497,7 +610,25 @@ class TagAutoCompleteApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Image Tag Editor")
-        self.resize(1200, 720)
+        
+        # Получаем размеры экрана для адаптивного размера окна
+        screen = QApplication.primaryScreen()
+        if screen:
+            screen_geo = screen.availableGeometry()
+            screen_w, screen_h = screen_geo.width(), screen_geo.height()
+            
+            # Устанавливаем разумный размер окна (не более 80% экрана)
+            max_w = int(screen_w * 0.8)
+            max_h = int(screen_h * 0.8)
+            
+            # Предпочтительные размеры, но не превышающие лимиты экрана
+            preferred_w = min(1200, max_w)
+            preferred_h = min(720, max_h)
+            
+            self.resize(preferred_w, preferred_h)
+        else:
+            # Fallback для случая, когда не удается получить размеры экрана
+            self.resize(1000, 600)
         
 # Установка иконки для окна, заголовка и панели задач
         try:
@@ -597,6 +728,9 @@ class TagAutoCompleteApp(QMainWindow):
         self.tag_input.setPlaceholderText("Enter tags separated by commas...")
         self.tag_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.tag_input.setAccessibleName("Tags input")
+        
+        # Добавляем подсветку синтаксиса для специальных тегов
+        self.tag_highlighter = TagHighlighter(self.tag_input.document())
 
         # Список подсказок
         self.suggestions_label = QLabel("Suggestions:")
@@ -620,6 +754,14 @@ class TagAutoCompleteApp(QMainWindow):
         self.save_button.setFixedHeight(44)
         self.save_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.save_button.setStyleSheet(self.save_button.styleSheet() + "QPushButton{font-size:11pt;}")
+        
+        # Кнопка для перемещения важных тегов
+        self.priority_tags_button = QPushButton("⭐ Move Important Tags to Top")
+        self.priority_tags_button.setEnabled(True)  # Включаем сразу - работает и без изображения
+        self.priority_tags_button.setFixedHeight(36)
+        self.priority_tags_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.priority_tags_button.setStyleSheet("QPushButton{background-color:#4a6741; color:#ffffff; font-weight:bold;}")
+        self.priority_tags_button.setToolTip("Moves important tags (artist:, oc:, species, etc.) to the beginning of the tag list")
 
         # Индикатор статуса
         self.status_bar = QStatusBar(self)
@@ -681,15 +823,18 @@ class TagAutoCompleteApp(QMainWindow):
         # Правая панель — теги и подсказки
         right_panel = QVBoxLayout()
         
-        # Top row: Tags label and macro dropdown
+        # Top row: Tags label and action buttons
         tags_header = QHBoxLayout()
         tags_label = QLabel("Tags:")
         tags_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
         tags_header.addWidget(tags_label)
         tags_header.addStretch()
         
-        # Add macro dropdown if available
+        # Add priority tags button and macro dropdown
+        tags_header.addWidget(self.priority_tags_button)
         if self.macro_dropdown:
+            # Make macro dropdown button square
+            self.macro_dropdown.dropdown_button.setFixedSize(36, 36)
             tags_header.addWidget(self.macro_dropdown)
         
         right_panel.addLayout(tags_header)
@@ -817,6 +962,9 @@ class TagAutoCompleteApp(QMainWindow):
         # навигация
         self.left_btn.clicked.connect(lambda: self.show_prev_image())
         self.right_btn.clicked.connect(lambda: self.show_next_image())
+        
+        # кнопка важных тегов
+        self.priority_tags_button.clicked.connect(lambda: self.move_important_tags_to_top())
         
         # macro system connections
         if self.macro_dropdown:
@@ -994,6 +1142,10 @@ class TagAutoCompleteApp(QMainWindow):
             item = QListWidgetItem(display_text)
             # Сохраняем оригинальный тег как данные для выбора
             item.setData(0x0100, s)  # Qt.ItemDataRole.UserRole
+            
+            # Применяем цветовую подсветку для специальных тегов
+            self._apply_suggestion_highlighting(item, s)
+            
             self.suggestions_list.addItem(item)
 
         if self.suggestions_list.count():
@@ -1053,6 +1205,29 @@ class TagAutoCompleteApp(QMainWindow):
         padding = max(1, padding)  # минимум 1 пробел
 
         return f"{display_tag}{' ' * padding}{freq_str}"
+
+    def _apply_suggestion_highlighting(self, item: QListWidgetItem, tag: str) -> None:
+        """Применить цветовую подсветку для специальных тегов в списке предложений.
+        
+        Args:
+            item: Элемент списка для подсветки
+            tag: Оригинальный тег для анализа категории
+        """
+        tag_lower = tag.lower()
+        
+        # Определяем категорию тега и применяем соответствующий цвет фона
+        if tag_lower.startswith('artist:'):
+            # Artist теги - голубой цвет
+            item.setBackground(QBrush(QColor(100, 181, 246, 102)))  # #64B5F6 с 40% прозрачности
+        elif tag_lower.startswith('oc:'):
+            # OC теги - зеленый цвет  
+            item.setBackground(QBrush(QColor(129, 199, 132, 102)))  # #81C784 с 40% прозрачности
+        elif tag_lower in {'solo', 'duo', 'trio', 'group', 'crowd'}:
+            # Количественные теги - желтый цвет
+            item.setBackground(QBrush(QColor(255, 183, 77, 102)))  # #FFB74D с 40% прозрачности
+        elif self._is_species_tag(tag_lower):
+            # Видовые теги - фиолетовый цвет
+            item.setBackground(QBrush(QColor(186, 104, 200, 102)))  # #BA68C8 с 40% прозрачности
 
     def hide_suggestions(self) -> None:
         """Очистить список подсказок, но не убирать сам контейнер из интерфейса.
@@ -1266,6 +1441,133 @@ class TagAutoCompleteApp(QMainWindow):
         
         logger.info("Executed macro '%s': inserted %d tags", macro_name, tag_count)
 
+    @log_user_action("Move Important Tags to Top")
+    def move_important_tags_to_top(self) -> None:
+        """Переместить важные теги в начало списка тегов.
+        
+        Важными считаются:
+        - Теги начинающиеся с "artist:"
+        - Теги начинающиеся с "oc:"
+        - Количественные теги: solo, duo, trio
+        - Видовые теги: pony, earth pony, pegasus, unicorn, alicorn, bat pony, dragon и др.
+        """
+        current_text = self.tag_input.toPlainText().strip()
+        if not current_text:
+            self.show_status("No tags to reorder", 2000)
+            return
+        
+        # Определяем важные теги по категориям
+        priority_patterns = {
+            'artist': lambda tag: tag.lower().startswith('artist:'),
+            'oc': lambda tag: tag.lower().startswith('oc:'),
+            'quantity': lambda tag: tag.lower().strip() in ['solo', 'duo', 'trio', 'group', 'crowd'],
+            'species': lambda tag: self._is_species_tag(tag.lower().strip()),
+        }
+        
+        # Парсим теги из текста
+        tags = self._parse_tags_from_text(current_text)
+        if len(tags) <= 1:
+            self.show_status("Not enough tags to reorder", 2000)
+            return
+        
+        # Разделяем теги на важные и обычные
+        important_tags = []
+        regular_tags = []
+        
+        # Сначала добавляем теги в порядке приоритета
+        priority_order = ['artist', 'oc', 'quantity', 'species']
+        
+        for category in priority_order:
+            check_func = priority_patterns[category]
+            category_tags = [tag for tag in tags if check_func(tag)]
+            for tag in category_tags:
+                if tag not in important_tags:
+                    important_tags.append(tag)
+        
+        # Добавляем остальные теги в том порядке, в котором они были
+        for tag in tags:
+            if tag not in important_tags:
+                regular_tags.append(tag)
+        
+        # Объединяем списки
+        reordered_tags = important_tags + regular_tags
+        
+        # Проверяем, изменился ли порядок
+        if reordered_tags == tags:
+            self.show_status("Tags are already in optimal order", 2000)
+            return
+        
+        # Создаем новый текст с переупорядоченными тегами
+        new_text = ', '.join(reordered_tags)
+        
+        # Обновляем поле ввода
+        self.tag_input.setPlainText(new_text)
+        
+        # Курсор в конец
+        cursor = self.tag_input.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.tag_input.setTextCursor(cursor)
+        
+        # Показываем результат
+        moved_count = len(important_tags)
+        self.show_status(f"Moved {moved_count} important tags to top", 3000)
+        
+        logger.info("Reordered tags: %d important tags moved to top", moved_count)
+
+    def _parse_tags_from_text(self, text: str) -> List[str]:
+        """Парсить теги из текста, используя запятую как разделитель.
+        
+        Удаляет дубликаты, сохраняя порядок первого появления тега.
+        """
+        if not text.strip():
+            return []
+        
+        # Используем только запятую как разделитель
+        tags = [tag.strip() for tag in text.split(',') if tag.strip()]
+        
+        # Удаляем дубликаты, сохраняя порядок первого появления
+        seen = set()
+        unique_tags = []
+        for tag in tags:
+            # Сравниваем в нижнем регистре для обнаружения дубликатов
+            tag_lower = tag.lower()
+            if tag_lower not in seen:
+                seen.add(tag_lower)
+                unique_tags.append(tag)
+        
+        return unique_tags
+
+    def _is_species_tag(self, tag: str) -> bool:
+        """Проверить, является ли тег видовым."""
+        # Список видовых тегов для пони/MLP
+        species_tags = {
+            # Основные виды пони
+            'pony', 'earth pony', 'pegasus', 'unicorn', 'alicorn', 'bat pony',
+            # Другие виды
+            'dragon', 'griffon', 'griffin', 'changeling', 'zebra', 'donkey', 'mule',
+            'hippogriff', 'seapony', 'kirin', 'yak', 'buffalo', 'minotaur',
+            # Общие категории
+            'anthro', 'human', 'humanized', 'robot', 'cyborg',
+            # Дополнительные варианты написания
+            'earth_pony', 'bat_pony', 'sea_pony'
+        }
+        
+        # Проверяем точное совпадение
+        if tag in species_tags:
+            return True
+        
+        # Проверяем варианты с подчеркиваниями и пробелами
+        tag_normalized = tag.replace('_', ' ').replace('+', ' ')
+        if tag_normalized in species_tags:
+            return True
+        
+        # Проверяем обратное преобразование
+        tag_with_underscores = tag.replace(' ', '_')
+        if tag_with_underscores in species_tags:
+            return True
+        
+        return False
+
     # ---------------- Работа с изображениями ----------------
     @log_user_action("Open Image Dialog")
     def load_image(self) -> None:
@@ -1324,6 +1626,7 @@ class TagAutoCompleteApp(QMainWindow):
 
             self.load_tags_from_file()
             self.save_button.setEnabled(True)
+            self.priority_tags_button.setEnabled(True)
             logger.info("Loaded image: %s", self.current_image_path)
             self.update_nav_buttons()
 

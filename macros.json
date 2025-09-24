@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "last_saved": "2025-09-25T00:57:57.848806",
+  "macros": [
+    {
+      "name": "BJ1",
+      "tags": "unicorn oc, pony, unicorn, solo, mare oc, female oc, mare, female, oc, oc only, prosthetic leg",
+      "description": "Unicorn OC with prosthetic leg - female mare character set",
+      "created_date": "2025-09-25T00:18:10.707561",
+      "last_used": "2025-09-25T00:57:55.847909",
+      "use_count": 3,
+      "hotkey": "",
+      "category": "General"
+    },
+    {
+      "name": "Rainbow",
+      "tags": "rd, safe, cute",
+      "description": "Rainbow Dash related tags",
+      "created_date": "2025-09-25T00:18:10.707561",
+      "last_used": "2025-09-25T00:42:49.642200",
+      "use_count": 2,
+      "hotkey": "",
+      "category": "General"
+    },
+    {
+      "name": "Basic OC",
+      "tags": "oc, oc only, solo, pony",
+      "description": "Basic original character tags",
+      "created_date": "2025-09-25T00:18:10.707561",
+      "last_used": "2025-09-25T00:42:45.195392",
+      "use_count": 2,
+      "hotkey": "",
+      "category": "General"
+    }
+  ]
+}
