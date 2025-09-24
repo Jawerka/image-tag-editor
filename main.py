@@ -451,6 +451,12 @@ class TagAutoCompleteApp(QMainWindow):
         # Фиксированная высота и всегда видимый контейнер подсказок
         self.suggestions_list.setVisible(True)
         self.suggestions_list.setFixedHeight(220)
+        
+        # Устанавливаем моноширный шрифт для правильного выравнивания
+        from PyQt6.QtGui import QFont
+        mono_font = QFont("Consolas", 9)  # Consolas - стандартный моноширный шрифт в Windows
+        mono_font.setStyleHint(QFont.StyleHint.Monospace)  # Fallback на системный моноширный
+        self.suggestions_list.setFont(mono_font)
 
         # Кнопка сохранить
         self.save_button = QPushButton("Save Tags (Ctrl+S)")
@@ -608,7 +614,7 @@ class TagAutoCompleteApp(QMainWindow):
     def _setup_connections(self) -> None:
         self.tag_input.textChanged.connect(self.on_text_changed)
         self.suggestion_timer.timeout.connect(self.update_suggestions)
-        self.suggestions_list.itemClicked.connect(lambda item: self.select_suggestion(item.text()))
+        self.suggestions_list.itemClicked.connect(lambda item: self.select_suggestion(item))
         self.suggestions_list.itemSelected.connect(self.select_suggestion)
         self.save_button.clicked.connect(self.save_tags)
 
@@ -782,14 +788,23 @@ class TagAutoCompleteApp(QMainWindow):
         return suggestions
 
     def show_suggestions(self, suggestions: List[str]) -> None:
-        # наполняем список подсказок
+        # наполняем список подсказок с частотой
         self.suggestions_list.clear()
         if not suggestions:
             self.hide_suggestions()
             return
 
         for s in suggestions:
-            item = QListWidgetItem(s)
+            # Получаем частоту использования тега
+            frequency = self.tag_frequencies.get(s, 0)
+            # Конвертируем underscores и plus в пробелы для отображения
+            display_tag = self.convert_tag_for_display(s)
+            # Форматируем строку с выравниванием частоты справа
+            display_text = self.format_suggestion_with_frequency(display_tag, frequency)
+            
+            item = QListWidgetItem(display_text)
+            # Сохраняем оригинальный тег как данные для выбора
+            item.setData(0x0100, s)  # Qt.ItemDataRole.UserRole
             self.suggestions_list.addItem(item)
 
         if self.suggestions_list.count():
@@ -798,7 +813,57 @@ class TagAutoCompleteApp(QMainWindow):
         # показываем метку и список
         self.suggestions_label.setVisible(True)
         self.suggestions_list.setVisible(True)
-        logger.debug("Showing %d suggestions in fixed field", len(suggestions))
+        logger.debug("Showing %d suggestions with frequencies in fixed field", len(suggestions))
+
+    def convert_tag_for_display(self, tag: str) -> str:
+        """Конвертировать тег для отображения:
+        - rainbow_dash → Rainbow Dash
+        - rainbow+dash → Rainbow Dash
+        """
+        # Заменяем подчеркивания и плюсы пробелами, сохраняя оригинальный регистр
+        display_tag = tag.replace('_', ' ').replace('+', ' ')
+        return display_tag
+
+    def convert_tag_for_storage(self, display_tag: str) -> str:
+        """Конвертировать отображаемый тег обратно в формат хранения:
+        - Rainbow Dash → rainbow_dash
+        """
+        # Приводим к нижнему регистру и заменяем пробелы подчеркиваниями
+        return display_tag.lower().replace(' ', '_')
+
+    def format_suggestion_with_frequency(self, display_tag: str, frequency: int) -> str:
+        """Форматировать строку предложения с частотой, выровненной справа."""
+        # Получаем ширину виджета для выравнивания
+        widget_width = self.suggestions_list.width()
+        if widget_width <= 0:
+            widget_width = 300  # fallback ширина
+
+        # Форматируем частоту с разделителями тысяч
+        if frequency >= 1000000:
+            freq_str = f"{frequency/1000000:.1f}M"
+        elif frequency >= 1000:
+            freq_str = f"{frequency/1000:.1f}K"
+        else:
+            freq_str = str(frequency)
+
+        # Рассчитываем примерную ширину в символах
+        font_metrics = QFontMetrics(self.suggestions_list.font())
+        char_width = font_metrics.horizontalAdvance("0")
+        available_chars = max(20, (widget_width - 40) // char_width)  # -40 для padding
+
+        # Резервируем место для частоты (примерно 8 символов)
+        freq_space = 8
+        tag_space = available_chars - freq_space
+
+        # Обрезаем тег если он слишком длинный
+        if len(display_tag) > tag_space:
+            display_tag = display_tag[:tag_space-3] + "..."
+
+        # Создаем строку с выравниванием
+        padding = available_chars - len(display_tag) - len(freq_str)
+        padding = max(1, padding)  # минимум 1 пробел
+
+        return f"{display_tag}{' ' * padding}{freq_str}"
 
     def hide_suggestions(self) -> None:
         """Очистить список подсказок, но не убирать сам контейнер из интерфейса.
@@ -810,47 +875,89 @@ class TagAutoCompleteApp(QMainWindow):
         # не прячем сам контейнер — он всегда должен быть там
         logger.debug("Cleared suggestions (container kept visible)")
 
-    def select_suggestion(self, tag: str) -> None:
+    def select_suggestion(self, displayed_text_or_item) -> None:
         """Вставить выбранный тег в текущую позицию курсора.
 
-        Исправлена логика так, чтобы сохранять пробел(ы) перед выбранным токеном
-        (если они были), а также не удалять пробел после принятия предложения.
+        Новая логика:
+        - Использует оригинальный тег из данных элемента, если доступен
+        - Поддерживает пробелы вместо запятых в качестве разделителей
+        - Конвертирует теги с подчеркиваниями и плюсами в читаемый формат
         """
-        logger.info("Selecting suggestion: %s", tag)
+        # Получаем оригинальный тег из данных элемента
+        original_tag = None
+        if hasattr(displayed_text_or_item, 'data'):
+            # Это QListWidgetItem
+            original_tag = displayed_text_or_item.data(0x0100)  # Qt.ItemDataRole.UserRole
+        elif isinstance(displayed_text_or_item, str):
+            # Это строка - может быть из старого кода
+            displayed_text = displayed_text_or_item
+            # Попробуем найти соответствующий элемент в списке
+            for i in range(self.suggestions_list.count()):
+                item = self.suggestions_list.item(i)
+                if item and item.text() == displayed_text:
+                    original_tag = item.data(0x0100)
+                    break
+            
+            # Если не найден, используем отображаемый текст (fallback)
+            if not original_tag:
+                original_tag = displayed_text.split()[0] if displayed_text else ""
+        
+        if not original_tag:
+            logger.warning("Could not determine original tag from: %s", displayed_text_or_item)
+            return
+
+        logger.info("Selecting suggestion: %s (original: %s)", displayed_text_or_item, original_tag)
+        
         text = self.tag_input.toPlainText()
         cursor = self.tag_input.textCursor()
         cursor_pos = cursor.position()
-        left = text.rfind(",", 0, cursor_pos)
-        right = text.find(",", cursor_pos)
+        
+        # Ищем границы текущего тега - используем как запятые, так и пробелы как разделители
+        # Для более гибкого определения границ
+        separators = [',', ' ']
+        
+        # Поиск левой границы (ищем последний разделитель слева от курсора)
+        left = -1
+        for sep in separators:
+            pos = text.rfind(sep, 0, cursor_pos)
+            if pos > left:
+                left = pos
+        
+        # Поиск правой границы (ищем первый разделитель справа от курсора)  
+        right = len(text)
+        for sep in separators:
+            pos = text.find(sep, cursor_pos)
+            if pos != -1 and pos < right:
+                right = pos
+
         start = 0 if left == -1 else left + 1
-        end = len(text) if right == -1 else right
+        end = right
 
         fragment = text[start:end]
-        # Сохраняем ведущие пробелы в фрагменте (если пользователь ставил пробел после запятой)
-        leading_ws_len = len(fragment) - len(fragment.lstrip(" 	"))
+        # Сохраняем ведущие пробелы в фрагменте
+        leading_ws_len = len(fragment) - len(fragment.lstrip(" \t"))
         leading_ws = fragment[:leading_ws_len]
 
         prefix = text[:start]
         suffix = text[end:]
 
-        new_token = tag.strip()
-        # Если после фрагмента нет непустых символов — добавляем разделитель
-        add_separator = False
+        # Конвертируем тег для отображения (rainbow_dash -> Rainbow Dash)
+        display_tag = self.convert_tag_for_display(original_tag)
+        
+        # Определяем разделитель - используем пробел как основной разделитель
+        add_separator = ""
         if not suffix.strip():
-            add_separator = True
+            add_separator = " "  # Пробел вместо запятой
+        elif suffix and not suffix[0].isspace():
+            add_separator = " "  # Добавляем пробел если его нет
 
-        # Собираем новый текст, осторожно восстанавливая пробелы
-        new_text = prefix + leading_ws + new_token
-        if add_separator:
-            new_text += ", "
-        new_text += suffix
+        # Собираем новый текст
+        new_text = prefix + leading_ws + display_tag + add_separator + suffix
 
         self.tag_input.setPlainText(new_text)
 
-        # Устанавливаем новый курсор — после вставленного токена
-        new_cursor_pos = len(prefix) + len(leading_ws) + len(new_token)
-        if add_separator:
-            new_cursor_pos += 2  # длина ", "
+        # Устанавливаем новый курсор — после вставленного тега
+        new_cursor_pos = len(prefix) + len(leading_ws) + len(display_tag) + len(add_separator)
         new_cursor = self.tag_input.textCursor()
         new_cursor.setPosition(new_cursor_pos)
         self.tag_input.setTextCursor(new_cursor)
@@ -862,7 +969,7 @@ class TagAutoCompleteApp(QMainWindow):
     # ---------------- Управление клавишами ----------------
     def on_tab_pressed(self) -> None:
         if self.suggestions_list.count() > 0 and self.suggestions_list.currentItem():
-            self.select_suggestion(self.suggestions_list.currentItem().text())
+            self.select_suggestion(self.suggestions_list.currentItem())
         else:
             self.focusNextChild()
 
@@ -886,7 +993,7 @@ class TagAutoCompleteApp(QMainWindow):
 
     def on_enter_pressed(self) -> None:
         if self.suggestions_list.count() > 0 and self.suggestions_list.currentItem():
-            self.select_suggestion(self.suggestions_list.currentItem().text())
+            self.select_suggestion(self.suggestions_list.currentItem())
 
     def on_escape_pressed(self) -> None:
         if self.suggestions_list.count() > 0:

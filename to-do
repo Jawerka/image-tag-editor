@@ -1,0 +1,34 @@
+
+
+
+
+
+Необходимо сделать тестовый код который мог бы обрабатывать такую команду, указанное изображение загружать через POST на сервер. API указан ниже.
+Теги и описание можно создать любые автогенерированные, сами изображения нужно немного байтово менять перед загрузкой, чтобы у них были разные хэши. И была возможность тестировать программу с одним изображением.
+
+Путь до изображения которым будут проверять "C:\storage\Projects\Pycharm\tags-you\assets\[2018-11-12] RDpants.png"
+
+
+Posting Images
+Posting images should be done via request body parameters. An example with all parameters included is shown below.
+
+You must provide the direct link to the image in the url parameter.
+
+You must set the content-type header to application/json for the site to process your request.
+
+POST http://localhost:8080/api/v1/json/images?key=D8qfOS6eT6s8eE5vduYX
+{
+  "image": {
+    "description": "[bq]Hey there this is a test post![/bq]\nDescriptions are *weird*.\nHave a >>0 re-upload :)\n",
+    "tag_input": "safe, artist:assasinmonkey, artist:equum_amici, alicorn, angry, animated, art, badass, barrier, crying, dark, epic, female, fight, force field, glare, glow, good vs evil, lord tirek, low angle, magic, mare, messy mane, metal as fuck, perspective, plot, pony, raised hoof, size difference, spread wings, stomping, twilight sparkle, twilight sparkle (alicorn), twilight vs tirek, twilight\'s kingdom, underhoof",
+    "source_url": "http://localhost:8080/images/1"
+  },
+  "url": "http://localhost:8080/img/view/2025/9/23/1.gif"
+}
+
+POST	http://localhost:8080/api/v1/json/images	key, url	Submits a new image. Both key and url are required. Errors will result in an {"errors":image-errors-response}.	{"image":image-response}	Posting images
+
+Проверку наличия файла нужно производить по запросу GET http://localhost:8080/api/v1/json/images/1
+1 - это номер вернувшегося изображения, если изображение есть то в ответе будет json вида 
+
+{"image":{"orig_sha512_hash":"a08bd0f79d410661f41880c559ab7f0473f84c2a4e8332eab0740af39ceb1d77737c5d71cc3a393dfba625485ec258510866073e2d89ed2f21ebf761ed2f8316","tag_ids":[18,34,12,19,41,29,13,42,38,31,8,10,23,9,15,36,32,1,25,28,20,43,11,17,24,37,40,14,33,16,30,21,27,26,22,39],"height":141,"orig_size":1166272,"format":"gif","downvotes":0,"updated_at":"2025-09-23T15:49:39Z","thumbnails_generated":true,"representations":{"full":"/img/view/2025/9/23/1.gif","small":"/img/2025/9/23/1/full.gif","thumb_tiny":"/img/2025/9/23/1/thumb_tiny.gif","medium":"/img/2025/9/23/1/full.gif","thumb":"/img/2025/9/23/1/full.gif","thumb_small":"/img/2025/9/23/1/thumb_small.gif","tall":"/img/2025/9/23/1/full.gif","large":"/img/2025/9/23/1/full.gif","webm":"/img/2025/9/23/1/full.webm","mp4":"/img/2025/9/23/1/full.mp4"},"id":1,"sha512_hash":"05899827429aa7e17db777756e021c88013fab19331d7505def75c8feb51f4b9f5236440021ca6a7d2177b1326ad188e774b2f94dd2dba65cc69114b8bc0177a","uploader_id":4,"score":0,"deletion_reason":null,"aspect_ratio":1.77304964539007,"first_seen_at":"2025-09-23T15:49:21Z","source_url":"","animated":true,"view_url":"/img/view/2025/9/23/1__safe_artist-colon-assasinmonkey_artist-colon-equum_amici_alicorn_angry_animated_art_badass_barrier_crying_dark_epic_female_fight_force+field_glare_glow.gif","hidden_from_users":false,"upvotes":0,"description":"Fairly large GIF (~23MB), use to test WebM stuff.","name":"fixtures-1758642560612344","wilson_score":0,"faves":0,"comment_count":4,"mime_type":"image/gif","processed":true,"spoilered":false,"duplicate_of":null,"size":1166272,"intensities":{"sw":47.128401,"se":32.39022,"nw":54.129958,"ne":67.549502},"tags":["epic","raised hoof","artist:assasinmonkey","female","twilight sparkle (alicorn)","messy mane","artist:equum_amici","twilight vs tirek","stomping","perspective","alicorn","animated","glow","angry","barrier","size difference","plot","safe","lord tirek","mare","fight","underhoof","art","dark","good vs evil","spread wings","twilight sparkle","badass","pony","crying","metal as fuck","force field","magic","low angle","glare","twilight's kingdom"],"created_at":"2025-09-23T15:49:21Z","duration":6.12,"uploader":"Pleb","tag_count":36,"width":250,"source_urls":[]},"interactions":[]}
