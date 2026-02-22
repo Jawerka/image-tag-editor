@@ -232,6 +232,34 @@ python src/main.py
 
 #### Шаг 7: Сборка исполняемого файла
 
+**Вариант А: Использование Nuitka (рекомендуется)**
+
+```powershell
+# Очистка перед компиляцией (ОБЯЗАТЕЛЬНО!)
+Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
+if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
+if (Test-Path "main.build") { Remove-Item -Recurse -Force "main.build" }
+if (Test-Path "main.dist") { Remove-Item -Recurse -Force "main.dist" }
+if (Test-Path "$env:APPDATA\Nuitka") { Remove-Item -Recurse -Force "$env:APPDATA\Nuitka" }
+
+# Установка Nuitka
+pip install nuitka
+
+# Компиляция
+python -m nuitka --onefile --enable-plugin=pyqt6 --windows-console-mode=disable --windows-icon-from-ico=assets/icon.ico --output-filename=ImageTagEditor.exe --assume-yes-for-downloads --include-data-file=assets/icon.ico=icon.ico --python-flag=no_docstrings --python-flag=no_asserts --remove-output --output-dir=dist src/main.py
+
+# Готовый exe файл появится в папке dist/
+dir dist\ImageTagEditor.exe
+```
+
+**Преимущества Nuitka:**
+- Меньший размер файла (~60-80 MB)
+- Лучшая производительность
+- Оптимизация кода
+
+**Вариант Б: Использование PyInstaller**
+
 ```bash
 # Установка PyInstaller (если не установлен)
 pip install pyinstaller
@@ -242,6 +270,14 @@ pyinstaller build/ImageTagEditor.spec
 # Готовый exe файл появится в папке dist/
 dir dist
 ```
+
+**Примечание:** Если возникает ошибка `PermissionError: [WinError 32]`, выполните очистку кэша Nuitka:
+```powershell
+Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+if (Test-Path "$env:APPDATA\Nuitka") { Remove-Item -Recurse -Force "$env:APPDATA\Nuitka" }
+```
+
+Подробная инструкция: [docs/nuitka.md](docs/nuitka.md)
 
 #### Деактивация виртуального окружения
 

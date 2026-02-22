@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Macro System for Image Tag Editor - Professional macro management system.
+"""Система макросов для Image Tag Editor - профессиональное управление макросами.
 
-This module provides a comprehensive macro system for the Image Tag Editor application,
-allowing users to create, manage, and execute predefined tag sets with a single click.
+Этот модуль предоставляет комплексную систему макросов для приложения Image Tag Editor,
+позволяя пользователям создавать, управлять и выполнять предопределённые наборы тегов
+одним кликом.
 
-Key Features:
-- Modern dark-themed UI matching application design
-- Expandable dropdown menu integration with main UI
-- JSON-based macro storage with auto-save
-- Import/export macro collections
-- Smart tag insertion with usage tracking
+Ключевые возможности:
+- Современный UI с тёмной темой соответствующий дизайну приложения
+- Раскрывающееся меню интегрированное с основным UI
+- JSON-хранилище макросов с автосохранением
+- Импорт/экспорт коллекций макросов
+- Умная вставка тегов с отслеживанием использования
 
-Technical Details:
-- JSON persistence in macros.json file
-- PyQt6-based modern UI components
-- Event-driven architecture for seamless integration
-- Comprehensive error handling and logging
+Технические детали:
+- JSON-сохранение в файле macros.json
+- Современные компоненты на базе PyQt6
+- Событийная архитектура для бесшовной интеграции
+- Комплексная обработка ошибок и логирование
 
-Requirements:
+Требования:
 - PyQt6
 - Python 3.8+
 
-License:
-    MIT License - see LICENSE file for details.
+Лицензия:
+    MIT License - подробности в файле LICENSE.
 """
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QApplication, QMenu, QToolButton, QFileDialog, QSpacerItem, QDialogButtonBox
 )
 
-# --------------------------- Constants & Configuration ---------------------------
+# --------------------------- Константы и конфигурация -------------------------------------
 
 MACRO_DB_FILE = Path("macros.json")
 MAX_RECENT_MACROS = 10
@@ -338,52 +339,52 @@ else:
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-# --------------------------- Dark Theme Application Function ---------------------------
+# --------------------------- Применение тёмной темы -------------------------------------
 
 def apply_dark_theme(app: QApplication) -> None:
-    """Apply a comprehensive dark theme to the entire application, including window titles."""
-    # Set application-wide dark palette
+    """Применить комплексную тёмную тему ко всему приложению, включая заголовки окон."""
+    # Устанавливаем тёмную палитру для всего приложения
     dark_palette = QPalette()
-    
-    # Window colors
+
+    # Цвета окон
     dark_palette.setColor(QPalette.ColorRole.Window, QColor(BG_DIALOG))
     dark_palette.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
-    
-    # Base colors (background for text inputs, list widgets, etc.)
+
+    # Базовые цвета (фон для текстовых полей, списков и т.д.)
     dark_palette.setColor(QPalette.ColorRole.Base, QColor(FIELD_BG))
     dark_palette.setColor(QPalette.ColorRole.AlternateBase, QColor(PANEL_BG))
-    
-    # Text colors
+
+    # Цвета текста
     dark_palette.setColor(QPalette.ColorRole.Text, QColor(TEXT))
     dark_palette.setColor(QPalette.ColorRole.BrightText, QColor("#ffffff"))
-    
-    # Button colors
+
+    # Цвета кнопок
     dark_palette.setColor(QPalette.ColorRole.Button, QColor("#262626"))
     dark_palette.setColor(QPalette.ColorRole.ButtonText, QColor(TEXT))
-    
-    # Highlight colors
+
+    # Цвета выделения
     dark_palette.setColor(QPalette.ColorRole.Highlight, QColor(ACCENT_PURPLE))
     dark_palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
-    
-    # Disabled colors
+
+    # Цвета отключённых элементов
     dark_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor("#7f7f7f"))
     dark_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#7f7f7f"))
     dark_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#7f7f7f"))
-    
-    # Link colors
+
+    # Цвета ссылок
     dark_palette.setColor(QPalette.ColorRole.Link, QColor(ACCENT_PURPLE))
     dark_palette.setColor(QPalette.ColorRole.LinkVisited, QColor("#8e5ca6"))
-    
-    # Tooltip colors
+
+    # Цвета подсказок
     dark_palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(PANEL_BG))
     dark_palette.setColor(QPalette.ColorRole.ToolTipText, QColor(TEXT))
-    
+
     app.setPalette(dark_palette)
     app.setStyleSheet(MACRO_STYLESHEET)
-    
+
     logger.info("Applied comprehensive dark theme to application")
 
-# --------------------------- Data Models (unchanged) ---------------------------
+# --------------------------- Модели данных -------------------------------------
 
 @dataclass
 class Macro:
@@ -419,7 +420,7 @@ class Macro:
     def from_dict(cls, data: Dict[str, Any]) -> 'Macro':
         return cls(**data)
 
-# --------------------------- MacroManager (unchanged logic) ---------------------------
+# --------------------------- MacroManager -------------------------------------
 
 class MacroManager(QObject):
     macros_changed = pyqtSignal()
@@ -596,12 +597,12 @@ class MacroManager(QObject):
         if self.auto_save:
             self.save_timer.start()
 
-# --------------------------- UI Components (pixel-accurate) ---------------------------
+# --------------------------- UI компоненты -------------------------------------
 
-# Helper functions for standardized message boxes (buttons on the right, danger styling independent of locale)
+# Вспомогательные функции для стандартизированных диалоговых окон
 
 def _create_question_icon(size: int = 72) -> QPixmap:
-    """Create a circular blue question icon pixmap similar to the reference image."""
+    """Создать круглую синюю иконку с вопросительным знаком похожую на референсное изображение."""
     pix = QPixmap(size, size)
     pix.fill(Qt.GlobalColor.transparent)
     p = QPainter(pix)
@@ -624,30 +625,31 @@ def _create_question_icon(size: int = 72) -> QPixmap:
 
 
 def _standard_question(parent, title: str, text: str, default_is_yes: bool = True) -> QMessageBox.StandardButton:
-    """Show a question dialog styled exactly like the reference.
+    """Показать диалог вопроса оформленный точно как на референсе.
 
-    - Uses a custom drawn blue circular question icon.
-    - Ensures 'Yes' (left) and 'No' (right) buttons are placed on the right side of the dialog,
-      with 'No' styled as prominent danger (red) and larger width.
-    - Works correctly regardless of localization.
-    Returns QMessageBox.StandardButton.Yes or .No
+    - Использует пользовательскую синюю круглую иконку с вопросительным знаком.
+    - Гарантирует что кнопки 'Yes' (слева) и 'No' (справа) размещены справа от диалога,
+      с 'No' оформленной как заметная опасность (красная) и большей ширины.
+    - Работает корректно независимо от локализации.
+    
+    Возвращает: QMessageBox.StandardButton.Yes или .No
     """
     msg = QMessageBox(parent)
-    msg.setIcon(QMessageBox.Icon.NoIcon)  # we'll use a custom pixmap
+    msg.setIcon(QMessageBox.Icon.NoIcon)  # Используем пользовательскую иконку
     msg.setWindowTitle(title)
     msg.setText(text)
-    # Draw and set custom icon
+    # Рисуем и устанавливаем пользовательскую иконку
     pix = _create_question_icon(76)
     msg.setIconPixmap(pix)
 
-    # ensure the message text looks like the reference
+    # Убеждаемся что текст сообщения выглядит как на референсе
     msg.setStyleSheet(MACRO_STYLESHEET)
 
-    # Create buttons explicitly so we can control sizes and objectNames
+    # Создаём кнопки явно чтобы контролировать размеры и objectNames
     yes = msg.addButton(QMessageBox.StandardButton.Yes)
     no = msg.addButton(QMessageBox.StandardButton.No)
 
-    # Assign object names for styling
+    # Назначаем object names для стилизации
     if yes is not None:
         yes.setObjectName('PrimaryButton')
         yes.setMinimumHeight(38)
@@ -659,14 +661,15 @@ def _standard_question(parent, title: str, text: str, default_is_yes: bool = Tru
         no.setMinimumWidth(160)
         no.setFont(QFont('Segoe UI', 10, QFont.Weight.DemiBold))
 
-    # Set default
+    # Устанавливаем кнопку по умолчанию
     if default_is_yes:
         msg.setDefaultButton(QMessageBox.StandardButton.Yes)
     else:
         msg.setDefaultButton(QMessageBox.StandardButton.No)
 
-    # Execute modal and ensure buttons are visually aligned to the right.
-    # We cannot fully control native title bar color (OS controlled). The dialog client area matches stylesheet.
+    # Выполняем модальный диалог.
+    # Не можем полностью контролировать цвет нативного заголовка (контролируется ОС).
+    # Клиентская область диалога соответствует таблице стилей.
     msg.exec()
     clicked = msg.clickedButton()
     if clicked == yes:
@@ -970,7 +973,7 @@ class MacroManagerDialog(QDialog):
         # Update from manager
         self.macro_manager.macros_changed.connect(self._refresh_macro_list)
 
-    # ----------------- Logic methods (same behavior as раньше) -----------------
+    # ----------------- Логика методов -------------------------------------
 
     def _refresh_macro_list(self) -> None:
         self.macro_list.clear()

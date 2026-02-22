@@ -1,5 +1,7 @@
 # Инструкция по компиляции Image Tag Editor в один файл с помощью Nuitka
 
+**Актуализировано:** 22 февраля 2026 г.
+
 Данная инструкция описывает процесс компиляции приложения Image Tag Editor в единый исполняемый файл с помощью Nuitka с полной поддержкой PyQt6.
 
 ## Предварительные требования
@@ -32,38 +34,95 @@ sudo apt-get install gcc g++
 xcode-select --install
 ```
 
+## 🔧 Решение частых проблем перед компиляцией
+
+### Ошибка PermissionError: [WinError 32]
+
+**Симптом:**
+```
+PermissionError: [WinError 32] Процесс не может получить доступ к файлу, 
+так как этот файл занят другим процессом: '.\module.numpy.compat.py3k.c'
+```
+
+**Решение:**
+
+1. **Завершите все процессы Python:**
+```powershell
+# Завершите все процессы Python
+Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# Или через taskkill
+taskkill /F /IM python.exe
+```
+
+2. **Очистите папки сборки:**
+```powershell
+if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
+if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
+if (Test-Path "main.build") { Remove-Item -Recurse -Force "main.build" }
+if (Test-Path "main.dist") { Remove-Item -Recurse -Force "main.dist" }
+```
+
+3. **Очистите кэш Nuitka:**
+```powershell
+if (Test-Path "$env:APPDATA\Nuitka") { Remove-Item -Recurse -Force "$env:APPDATA\Nuitka" }
+```
+
+4. **Перезапустите компиляцию:**
+```powershell
+python -m nuitka --onefile --enable-plugin=pyqt6 --windows-console-mode=disable --windows-icon-from-ico=assets/icon.ico --output-filename=ImageTagEditor.exe --assume-yes-for-downloads --include-data-file=assets/icon.ico=icon.ico --python-flag=no_docstrings --python-flag=no_asserts --remove-output --output-dir=dist src/main.py
+```
+
+**Примечание:** Эта проблема возникает в 90% случаев при повторной компиляции. Всегда очищайте кэш перед компиляцией.
+
 ## Компиляция с Nuitka
 
 ### Команда для компиляции в один файл
 
 ```powershell
-nuitka --onefile `
+# Очистка перед компиляцией (ОБЯЗАТЕЛЬНО!)
+Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
+if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
+if (Test-Path "main.build") { Remove-Item -Recurse -Force "main.build" }
+if (Test-Path "main.dist") { Remove-Item -Recurse -Force "main.dist" }
+if (Test-Path "$env:APPDATA\Nuitka") { Remove-Item -Recurse -Force "$env:APPDATA\Nuitka" }
+
+# Компиляция
+python -m nuitka --onefile `
        --enable-plugin=pyqt6 `
-       --disable-console `
+       --windows-console-mode=disable `
        --windows-icon-from-ico=assets/icon.ico `
        --output-filename=ImageTagEditor.exe `
        --assume-yes-for-downloads `
-       --include-data-file=derpibooru.csv=derpibooru.csv `
        --include-data-file=assets/icon.ico=icon.ico `
+       --python-flag=no_docstrings `
+       --python-flag=no_asserts `
+       --remove-output `
        --output-dir=dist `
        src/main.py
 ```
+
+**Важно:** Используйте `--windows-console-mode=disable` вместо устаревшего `--disable-console`
 
 ### Расшифровка параметров:
 
 - `--onefile` - компиляция в единый исполняемый файл
 - `--enable-plugin=pyqt6` - включение поддержки PyQt6
-- `--disable-console` - скрыть консольное окно (для GUI приложения)
+- `--windows-console-mode=disable` - скрыть консольное окно (для GUI приложения)
 - `--windows-icon-from-ico=icon.ico` - установка иконки приложения
 - `--output-filename=ImageTagEditor.exe` - имя выходного файла
 - `--assume-yes-for-downloads` - автоматическое согласие на загрузку зависимостей
 - `--include-data-file=...` - включение файлов данных в исполняемый файл
+- `--python-flag=no_docstrings` - удалить docstrings для уменьшения размера
+- `--python-flag=no_asserts` - удалить assert для оптимизации
+- `--remove-output` - удалить временные файлы после компиляции
 - `--output-dir=dist` - папка для сохранения результата
 
 ### Альтернативная команда для Windows (одной строкой)
 
 ```powershell
-nuitka --onefile --enable-plugin=pyqt6 --disable-console --windows-icon-from-ico=assets/icon.ico --output-filename=ImageTagEditor.exe --assume-yes-for-downloads --include-data-file=derpibooru.csv=derpibooru.csv --include-data-file=assets/icon.ico=icon.ico --output-dir=dist src/main.py
+Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force; if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }; if (Test-Path "build") { Remove-Item -Recurse -Force "build" }; if (Test-Path "main.build") { Remove-Item -Recurse -Force "main.build" }; if (Test-Path "main.dist") { Remove-Item -Recurse -Force "main.dist" }; if (Test-Path "$env:APPDATA\Nuitka") { Remove-Item -Recurse -Force "$env:APPDATA\Nuitka" }; python -m nuitka --onefile --enable-plugin=pyqt6 --windows-console-mode=disable --windows-icon-from-ico=assets/icon.ico --output-filename=ImageTagEditor.exe --assume-yes-for-downloads --include-data-file=assets/icon.ico=icon.ico --python-flag=no_docstrings --python-flag=no_asserts --remove-output --output-dir=dist src/main.py
 ```
 
 ## Дополнительные опции

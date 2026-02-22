@@ -1,43 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Image Tag Editor - Professional image tagging application with intelligent autocomplete.
+"""Image Tag Editor - профессиональное приложение для добавления тегов к изображениям.
 
-This is a modern PyQt6 application for efficient image tagging with smart autocomplete
-features based on external tag databases. It provides an intuitive dark-themed interface
-for managing image tags with advanced navigation and keyboard shortcuts.
+Современное приложение PyQt6 для эффективного добавления тегов к изображениям с
+интеллектуальным автодополнением на основе внешних баз тегов. Предоставляет
+интуитивный интерфейс с тёмной темой для управления тегами с расширенной навигацией
+и горячими клавишами.
 
-Key Features:
-- Intelligent tag autocomplete with relevance prioritization
-- Fast image navigation using F-keys and arrow keys
-- Drag & drop support for convenient image loading
-- Auto-save tags in memory when switching between images
-- Dark theme for comfortable extended use
-- Comprehensive logging for troubleshooting
-- Caching for fast performance with large collections
+Ключевые возможности:
+- Интеллектуальное автодополнение тегов с приоритизацией по релевантности
+- Быстрая навигация по изображениям с помощью F-клавиш и стрелок
+- Поддержка drag & drop для удобной загрузки изображений
+- Автосохранение тегов в памяти при переключении между изображениями
+- Тёмная тема для комфортной длительной работы
+- Комплексное логирование для устранения неполадок
+- Кэширование для высокой производительности при работе с большими коллекциями
 
-Technical Details:
-- Multi-line tag input field (QPlainTextEdit) that fills the right panel height
-- Fixed suggestions panel (QListWidget) with keyboard and mouse navigation
-- Drag & drop image support plus file dialog for opening images
-- Image navigation using buttons and mouse wheel over image area
-- Tag persistence in .txt files alongside images with memory caching
-- Enhanced error handling and detailed logging (app.log + console)
+Технические детали:
+- Многострочное поле ввода тегов (QPlainTextEdit) заполняющее высоту правой панели
+- Фиксированная панель подсказок (QListWidget) с навигацией клавиатурой и мышью
+- Поддержка drag & drop изображений плюс диалог открытия файлов
+- Навигация по изображениям кнопками и колесом мыши над областью просмотра
+- Сохранение тегов в .txt файлах рядом с изображениями с кэшированием в памяти
+- Расширенная обработка ошибок и детальное логирование (app.log + консоль)
 
-Requirements:
+Требования:
 - Python 3.10+
 - PyQt6
 - pandas
-- derpibooru.csv tag database (downloaded separately)
+- Файл базы тегов derpibooru.csv (загружается отдельно)
 
-Usage:
+Использование:
     python main.py
 
-License:
-    MIT License - see LICENSE file for details.
+Лицензия:
+    MIT License - подробности в файле LICENSE.
 
-Database:
-    This application requires an external tag database file 'derpibooru.csv'.
-    Download from: https://github.com/DominikDoom/a1111-sd-webui-tagcomplete/tree/main/tags
+База данных:
+    Приложению требуется внешний файл базы тегов 'derpibooru.csv'.
+    Загрузить с: https://github.com/DominikDoom/a1111-sd-webui-tagcomplete/tree/main/tags
 """
 from __future__ import annotations
 
@@ -45,7 +46,7 @@ from pathlib import Path
 import logging
 import sys
 import argparse
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import difflib
 import pandas as pd
@@ -88,7 +89,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
-# Import macro system
+# Импорт системы макросов
 try:
     from macro_system import MacroManager, MacroDropdown
     MACRO_SYSTEM_AVAILABLE = True
@@ -103,6 +104,14 @@ DEBOUNCE_MS = 150
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 LOG_FILE = "app.log"
 TAG_DB_CSV = Path("derpibooru.csv")
+DESCRIPTION_SEPARATOR = "###DESCRIPTION###"  # Разделитель между тегами и описанием
+
+# Пороги разрешения для автоматических тегов (в пикселях)
+# Основано на оригинальном определении:
+# - high res: ≥ 4 мегапикселей (2000×2000px) но < 16 мегапикселей (4000×4000px)
+# - absurd resolution: ≥ 16 мегапикселей (4000×4000px)
+HIGH_RES_THRESHOLD = 4_000_000  # 4 мегапикселя (2000×2000)
+ABSURD_RES_THRESHOLD = 16_000_000  # 16 мегапикселей (4000×4000)
 
 # Стиль — вынесен в константу для удобства правок
 APP_STYLESHEET = """
@@ -118,7 +127,7 @@ QStatusBar { color: #ffffff; background-color: #3c3f41; }
 """
 
 
-# --------------------------- Централизованная система логирования -------------------------------------
+# --------------------------- Централизованная система логирования ---------------------------
 import functools
 import traceback
 import time
@@ -277,7 +286,7 @@ def safe_execute(operation_name: str, default_return=None):
     return decorator
 
 
-# --------------------------- Система подсветки тегов ----------------------------------------
+# --------------------------- Система подсветки тегов ---------------------------
 
 class TagHighlighter(QSyntaxHighlighter):
     """Система подсветки специальных тегов в поле ввода.
@@ -386,7 +395,7 @@ class TagHighlighter(QSyntaxHighlighter):
         return False
 
 
-# --------------------------- Виджеты ----------------------------------------
+# --------------------------- Виджеты ---------------------------
 class TagInputTextEdit(QPlainTextEdit):
     """Многострочное поле ввода с сигналами на спец. клавиши.
 
@@ -603,7 +612,7 @@ class ImageWheelFilter(QObject):
         return super().eventFilter(watched, event)
 
 
-# --------------------------- Основное приложение ----------------------------
+# --------------------------- Основное приложение ---------------------------
 class TagAutoCompleteApp(QMainWindow):
     """Главное окно приложения.
 
@@ -614,27 +623,31 @@ class TagAutoCompleteApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Image Tag Editor")
-        
+
         # Получаем размеры экрана для адаптивного размера окна
         screen = QApplication.primaryScreen()
         if screen:
             screen_geo = screen.availableGeometry()
             screen_w, screen_h = screen_geo.width(), screen_geo.height()
-            
+
             # Устанавливаем разумный размер окна (не более 80% экрана)
             max_w = int(screen_w * 0.8)
             max_h = int(screen_h * 0.8)
-            
+
             # Предпочтительные размеры, но не превышающие лимиты экрана
             preferred_w = min(1200, max_w)
             preferred_h = min(720, max_h)
-            
+
             self.resize(preferred_w, preferred_h)
+
+            # Ограничиваем минимальную ширину окна чтобы предотвратить "разрастание"
+            self.setMinimumSize(800, 600)
         else:
             # Fallback для случая, когда не удается получить размеры экрана
             self.resize(1000, 600)
-        
-# Установка иконки для окна, заголовка и панели задач
+            self.setMinimumSize(800, 600)
+
+        # Установка иконки для окна, заголовка и панели задач
         try:
             icon_path = Path("assets/icon.ico")
             if icon_path.exists():
@@ -660,13 +673,17 @@ class TagAutoCompleteApp(QMainWindow):
         self.image_list: List[Path] = []
         self.current_index: Optional[int] = None
 
-        # кэш текста для изображений в памяти
-        self.text_cache: dict[str, str] = {}
+        # Кэш текста для изображений в памяти
+        # Структура: {path: {'tags': str, 'description': str}}
+        self.text_cache: dict[str, dict] = {}
 
-        # хранение оригинального QPixmap для корректного ресайза
+        # Хранение оригинального QPixmap для корректного ресайза
         self._original_pixmap: Optional[QPixmap] = None
 
-        # ----- Macro System -----
+        # Размеры текущего изображения (width, height)
+        self.current_image_dimensions: Optional[Tuple[int, int]] = None
+
+        # ----- Система макросов -----
         self.macro_manager = None
         self.macro_dropdown = None
         self._setup_macro_system()
@@ -684,7 +701,7 @@ class TagAutoCompleteApp(QMainWindow):
         self.suggestion_timer.setSingleShot(True)
         self.suggestion_timer.setInterval(DEBOUNCE_MS)
 
-        # ----- Соединения -----
+        # ----- Подключения -----
         self._setup_connections()
 
         # ----- Фильтры событий -----
@@ -702,7 +719,7 @@ class TagAutoCompleteApp(QMainWindow):
             # пересчёт будет выполнен при первом ресайзе, так что можно проигнорировать
             pass
 
-    # ---------------- UI: создание виджетов ----------------
+    # ---------------- UI: Создание виджетов ----------------
     def _create_widgets(self) -> None:
         # Навигация
         self.left_btn = QPushButton("◀")
@@ -732,9 +749,17 @@ class TagAutoCompleteApp(QMainWindow):
         self.tag_input.setPlaceholderText("Enter tags separated by commas...")
         self.tag_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.tag_input.setAccessibleName("Tags input")
-        
+
         # Добавляем подсветку синтаксиса для специальных тегов
         self.tag_highlighter = TagHighlighter(self.tag_input.document())
+
+        # Поле ввода описания (многострочное, 3-4 строки)
+        self.description_input = QPlainTextEdit()
+        self.description_input.setPlaceholderText("Image description (optional)...")
+        self.description_input.setMaximumHeight(100)  # ~3-4 строки
+        self.description_input.setMinimumHeight(80)
+        self.description_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.description_input.setAccessibleName("Description input")
 
         # Список подсказок
         self.suggestions_label = QLabel("Suggestions:")
@@ -744,7 +769,7 @@ class TagAutoCompleteApp(QMainWindow):
         # Фиксированная высота и всегда видимый контейнер подсказок
         self.suggestions_list.setVisible(True)
         self.suggestions_list.setFixedHeight(220)
-        
+
         # Устанавливаем моноширный шрифт для правильного выравнивания
         from PyQt6.QtGui import QFont
         mono_font = QFont("Consolas", 9)  # Consolas - стандартный моноширный шрифт в Windows
@@ -758,7 +783,7 @@ class TagAutoCompleteApp(QMainWindow):
         self.save_button.setFixedHeight(44)
         self.save_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.save_button.setStyleSheet(self.save_button.styleSheet() + "QPushButton{font-size:11pt;}")
-        
+
         # Кнопка для перемещения важных тегов
         self.priority_tags_button = QPushButton("⭐ Move Important Tags to Top")
         self.priority_tags_button.setEnabled(True)  # Включаем сразу - работает и без изображения
@@ -770,13 +795,18 @@ class TagAutoCompleteApp(QMainWindow):
         # Индикатор статуса
         self.status_bar = QStatusBar(self)
         self.setStatusBar(self.status_bar)
+        
+        # Метка с разрешением изображения в левой части status bar
+        self.resolution_label = QLabel("")
+        self.resolution_label.setStyleSheet("color: #888; font-size: 9pt;")
+        self.status_bar.addPermanentWidget(self.resolution_label, 0)  # 0 = фиксированный размер
 
         # Шорткаты: открыть, сохранить, навигация
         QShortcut(QKeySequence("Ctrl+O"), self, activated=self.load_image)
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self.save_tags)
         QShortcut(QKeySequence("Left"), self, activated=self.show_prev_image)
         QShortcut(QKeySequence("Right"), self, activated=self.show_next_image)
-        
+
         # F-key navigation hotkeys (alternative to arrow keys)
         QShortcut(QKeySequence("F1"), self, activated=self.show_prev_image)
         QShortcut(QKeySequence("F2"), self, activated=self.show_next_image)
@@ -785,27 +815,27 @@ class TagAutoCompleteApp(QMainWindow):
         QShortcut(QKeySequence("F9"), self, activated=self.save_tags)
         QShortcut(QKeySequence("F12"), self, activated=self.focus_input)
 
-    # ---------------- Macro System Setup ----------------
+    # ---------------- Настройка системы макросов ----------------
     def _setup_macro_system(self) -> None:
-        """Initialize the macro system if available."""
+        """Инициализировать систему макросов если доступна."""
         if not MACRO_SYSTEM_AVAILABLE:
             logger.info("Macro system not available, skipping initialization")
             return
-        
+
         try:
-            # Initialize macro manager
+            # Инициализируем менеджер макросов
             self.macro_manager = MacroManager(self)
-            
-            # Create macro dropdown (will be added to layout later)
+
+            # Создаём выпадающее меню макросов (будет добавлено в layout позже)
             self.macro_dropdown = MacroDropdown(self.macro_manager, self)
-            
+
             logger.info("Macro system initialized successfully")
         except Exception as e:
             logger.exception("Failed to initialize macro system: %s", e)
             self.macro_manager = None
             self.macro_dropdown = None
 
-    # ---------------- UI: компоновка ----------------
+    # ---------------- UI: Компоновка ----------------
     def _setup_layouts(self) -> None:
         main_widget = QWidget(self)
         main_layout = QHBoxLayout(main_widget)
@@ -826,46 +856,47 @@ class TagAutoCompleteApp(QMainWindow):
 
         # Правая панель — теги и подсказки
         right_panel = QVBoxLayout()
-        
+
         # Top row: Tags label and action buttons
         tags_header = QHBoxLayout()
         tags_label = QLabel("Tags:")
         tags_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
         tags_header.addWidget(tags_label)
         tags_header.addStretch()
-        
+
         # Add priority tags button and macro dropdown
         tags_header.addWidget(self.priority_tags_button)
         if self.macro_dropdown:
             # Make macro dropdown button square
             self.macro_dropdown.dropdown_button.setFixedSize(36, 36)
             tags_header.addWidget(self.macro_dropdown)
-        
+
         right_panel.addLayout(tags_header)
-        right_panel.addWidget(self.tag_input, 2)
+        right_panel.addWidget(self.tag_input, 2)  # stretch factor 2 (возвращено)
         right_panel.addWidget(self.suggestions_label)
         right_panel.addWidget(self.suggestions_list)
+        right_panel.addWidget(self.description_input)  # перемещено под список подсказок
 
         main_layout.addLayout(img_layout, 70)
         main_layout.addLayout(right_panel, 30)
 
         self.setCentralWidget(main_widget)
 
-    # ---------------- Данные: загрузка базы тегов ----------------
+    # ---------------- Данные: Загрузка базы тегов ----------------
     def _setup_data(self) -> None:
         if not TAG_DB_CSV.exists():
-            logger.warning("Tag database %s not found — подсказки будут недоступны.", TAG_DB_CSV)
+            logger.warning("Tag database %s not found - suggestions will be unavailable.", TAG_DB_CSV)
             self.all_tags = []
             self.all_tags_lower = []
             self.tag_frequencies = {}
             return
 
         try:
-            # Всегда используем ручной парсинг для надежности
-            # Стандартный pandas часто пропускает строки из-за некорректных кавычек
+            # Always use manual parsing for reliability
+            # Standard pandas often skips lines due to incorrect quotes
             logger.info("Using manual CSV parsing for maximum reliability")
             self.tag_db = self._manual_csv_parse(TAG_DB_CSV)
-                
+
             self.all_tags, self.tag_frequencies = self.process_tags_with_frequency(self.tag_db)
             self.all_tags_lower = [t.lower() for t in self.all_tags]
             logger.info("Loaded %d tags with frequencies from %s", len(self.all_tags), TAG_DB_CSV)
@@ -876,36 +907,36 @@ class TagAutoCompleteApp(QMainWindow):
             self.tag_frequencies = {}
 
     def _manual_csv_parse(self, csv_path: Path) -> pd.DataFrame:
-        """Ручной парсинг CSV для случаев, когда pandas не справляется.
-        
-        Обрабатывает строки вида: tag,category,frequency,"alternatives"
+        """Manual CSV parsing for cases when pandas can't handle it.
+
+        Handles lines like: tag,category,frequency,"alternatives"
         """
         import csv
         from io import StringIO
-        
+
         rows = []
         with open(csv_path, 'r', encoding='utf-8') as f:
             for line_no, line in enumerate(f, 1):
                 try:
-                    # Простой парсинг CSV строки
+                    # Simple CSV line parsing
                     reader = csv.reader([line.strip()], quotechar='"', delimiter=',')
                     row = next(reader)
-                    # Дополняем до 4 колонок если нужно
+                    # Pad to 4 columns if needed
                     while len(row) < 4:
                         row.append("")
                     rows.append(row)
                 except Exception as e:
                     logger.warning("Failed to parse line %d: %s", line_no, e)
                     continue
-        
+
         logger.info("Manual CSV parsing: %d rows processed", len(rows))
         return pd.DataFrame(rows)
 
     def process_tags_with_frequency(self, df: pd.DataFrame) -> tuple[List[str], dict[str, int]]:
-        """Извлечь теги и их частоты из датафрейма CSV.
-        
-        Структура CSV: tag_name, category, frequency, alternatives
-        Возвращает: (список тегов, словарь tag -> frequency)
+        """Extract tags and their frequencies from CSV dataframe.
+
+        CSV structure: tag_name, category, frequency, alternatives
+        Returns: (list of tags, dict tag -> frequency)
         """
         tag_freq_map: dict[str, int] = {}
         
@@ -973,6 +1004,9 @@ class TagAutoCompleteApp(QMainWindow):
         # macro system connections
         if self.macro_dropdown:
             self.macro_dropdown.macro_selected.connect(self.execute_macro)
+
+        # Подключение для поля описания
+        self.description_input.textChanged.connect(self.on_text_cache_changed)
 
     # ---------------- Подсказки ----------------
     def on_text_changed(self) -> None:
@@ -1285,7 +1319,7 @@ class TagAutoCompleteApp(QMainWindow):
         # Для более гибкого определения границ
         separators = [',', ' ']
         
-        # Поиск левой границы (ищем последний разделитель слева от курсора)
+        # Поиск левой границы (ищем последни�� разделитель слева от к������������рсора)
         left = -1
         for sep in separators:
             pos = text.rfind(sep, 0, cursor_pos)
@@ -1318,7 +1352,7 @@ class TagAutoCompleteApp(QMainWindow):
         if not suffix.strip():
             add_separator = " "  # Пробел вместо запятой
         elif suffix and not suffix[0].isspace():
-            add_separator = " "  # Добавляем пробел если его нет
+            add_separator = " "  # Добавляем пробел если его н����т
 
         # Собираем новый текст
         new_text = prefix + leading_ws + display_tag + add_separator + suffix
@@ -1331,7 +1365,7 @@ class TagAutoCompleteApp(QMainWindow):
         new_cursor.setPosition(new_cursor_pos)
         self.tag_input.setTextCursor(new_cursor)
 
-        # Оставляем контейнер подсказок видимым, но очищаем выбор
+        # Оставляем контейнер подска��ок видимым, но очищаем выбор
         self.suggestions_list.clearSelection()
         self.tag_input.setFocus()
 
@@ -1371,10 +1405,14 @@ class TagAutoCompleteApp(QMainWindow):
             self.tag_input.clearFocus()
 
     def on_text_cache_changed(self) -> None:
-        """Сохраняет содержимое поля в память (кэш) для текущего изображения."""
+        """Сохраняет теги и описание в память для текущего изображения."""
         if self.current_image_path:
-            current_text = self.tag_input.toPlainText()
-            self.text_cache[str(self.current_image_path)] = current_text
+            tags = self.tag_input.toPlainText()
+            description = self.description_input.toPlainText()
+            self.text_cache[str(self.current_image_path)] = {
+                'tags': tags,
+                'description': description
+            }
 
     def focus_input(self) -> None:
         self.tag_input.setFocus()
@@ -1572,7 +1610,7 @@ class TagAutoCompleteApp(QMainWindow):
         
         return False
 
-    # ---------------- Работа с изображениями ----------------
+    # ---------------- Обработка изображений ----------------
     @log_user_action("Open Image Dialog")
     def load_image(self) -> None:
         """Открыть диалог выбора изображения и загрузить файл.
@@ -1619,19 +1657,31 @@ class TagAutoCompleteApp(QMainWindow):
                 logger.error("Failed to read image: %s", reader.errorString())
                 return
 
+            # Получаем размеры изображения
+            width, height = image.width(), image.height()
+            self.current_image_dimensions = (width, height)
+
             pixmap = QPixmap.fromImage(image)
             self._original_pixmap = pixmap
             self._update_preview_pixmap()
+
+            # Обновляем метку с разрешением
+            self.update_resolution_label()
 
             if self.current_image_path in self.image_list:
                 self.current_index = self.image_list.index(self.current_image_path)
             else:
                 self.current_index = None
 
+            # Сначала загружаем теги из файла
             self.load_tags_from_file()
+            
+            # Потом добавляем авто-теги разрешения (если их еще нет)
+            self._auto_add_resolution_tags(width, height)
+
             self.save_button.setEnabled(True)
             self.priority_tags_button.setEnabled(True)
-            logger.info("Loaded image: %s", self.current_image_path)
+            logger.info("Loaded image: %s (%dx%d)", self.current_image_path, width, height)
             self.update_nav_buttons()
 
         except Exception as exc:
@@ -1703,12 +1753,18 @@ class TagAutoCompleteApp(QMainWindow):
         available_h_for_image = max(240, central_h - other_vertical - 20)
 
         # Желаемые проценты от общего окна (как просили): 70% ширины, 90% высоты
-        desired_w = int(self.width() * 0.7)
-        desired_h = int(self.height() * 0.9)
+        # Но ограничиваем чтобы не вызывать циклический рост
+        current_window_w = self.width()
+        desired_w = int(current_window_w * 0.5)  # Уменьшил с 0.7 до 0.5
+        desired_h = int(current_window_w * 0.9)
 
         # Ограничиваем желаемое доступной площадью и размерами экрана
         desired_w = min(desired_w, available_w_for_image, screen_w - 40)
         desired_h = min(desired_h, available_h_for_image, screen_h - 80)
+        
+        # Дополнительно ограничиваем сверху чтобы не вызывать рост окна
+        desired_w = min(desired_w, 800)  # Максимум 800px для превью
+        desired_h = min(desired_h, 600)  # Максимум 600px для превью
 
         # Приводим к разумным минимумам
         min_w, min_h = 320, 240
@@ -1741,24 +1797,46 @@ class TagAutoCompleteApp(QMainWindow):
             self.image_list = []
 
     def show_image_by_index(self, index: int) -> None:
+        """Показать изображение по индексу в списке.
+        
+        Автосохраняет теги и описание предыдущего изображения перед переключением.
+        """
         if not self.image_list:
             return
         index = max(0, min(index, len(self.image_list) - 1))
         path = self.image_list[index]
+        
+        # Автосохраняем теги предыдущего изображения если они изменились
+        if self.current_image_path and self.current_image_path != path:
+            self.save_tags()
+        
         reader = QImageReader(str(path))
         reader.setAutoTransform(True)
         image = reader.read()
         if image.isNull():
             logger.error("Cannot read image at %s", path)
             return
+
+        # Получаем и сохраняем размеры
+        width, height = image.width(), image.height()
+        self.current_image_dimensions = (width, height)
+
         pixmap = QPixmap.fromImage(image)
         self._original_pixmap = pixmap
         self._update_preview_pixmap()
+
+        # Обновляем метку с разрешением
         self.current_image_path = path
+        self.update_resolution_label()
+
         self.current_index = index
+        # Сначала загружаем теги из файла
         self.load_tags_from_file()
+        # Потом добавляем авто-теги разрешения (если их еще нет)
+        self._auto_add_resolution_tags(width, height)
+
         self.update_nav_buttons()
-        logger.info("Switched to image %d: %s", self.current_index, self.current_image_path)
+        logger.info("Switched to image %d: %s (%dx%d)", index + 1, path.name, width, height)
 
     @log_user_action("Navigate Next Image")
     def show_next_image(self) -> None:
@@ -1794,6 +1872,7 @@ class TagAutoCompleteApp(QMainWindow):
         self.update_image_name_label()
 
     def update_image_name_label(self) -> None:
+        """Обновить метку с именем изображения."""
         if not self.current_image_path:
             self.image_name_label.setText("No image loaded")
             return
@@ -1806,13 +1885,71 @@ class TagAutoCompleteApp(QMainWindow):
             text = image_name
         self.image_name_label.setText(text)
 
+    def update_resolution_label(self) -> None:
+        """Обновить метку с разрешением и расширением изображения в status bar."""
+        if not self.current_image_dimensions:
+            self.resolution_label.setText("")
+            return
+        
+        width, height = self.current_image_dimensions
+        file_ext = self.current_image_path.suffix.upper() if self.current_image_path else ""
+        
+        # Формат: "1920×1080 • PNG"
+        resolution_text = f"{width}×{height}"
+        if file_ext:
+            resolution_text += f" • {file_ext[1:]}"  # Убираем точку
+        
+        self.resolution_label.setText(resolution_text)
+
+    def _auto_add_resolution_tags(self, width: int, height: int) -> None:
+        """Автоматически добавить теги high res / absurd resolution.
+        
+        Основано на оригинальном определении:
+        - high res: ≥ 4 мегапикселей (2000×2000px) но < 16 мегапикселей (4000×4000px)
+        - absurd resolution: ≥ 16 мегапикселей (4000×4000px)
+        
+        Args:
+            width: Ширина изображения в пикселях
+            height: Высота изображения в пикселях
+        """
+        # Получаем текущие теги
+        current_text = self.tag_input.toPlainText().strip()
+        tag_list = [tag.strip() for tag in current_text.split(',') if tag.strip()]
+        tag_list_lower = [tag.lower() for tag in tag_list]
+        
+        # Считаем общее количество пикселей
+        total_pixels = width * height
+        
+        # Определяем нужный тег на основе общего количества пикселей
+        new_tag = None
+        if total_pixels >= ABSURD_RES_THRESHOLD:
+            new_tag = "absurd resolution"
+        elif total_pixels >= HIGH_RES_THRESHOLD:
+            new_tag = "high res"
+        
+        # Добавляем тег если его еще нет
+        if new_tag and new_tag.lower() not in tag_list_lower:
+            tag_list.append(new_tag)
+            new_tags_text = ', '.join(tag_list)
+            self.tag_input.setPlainText(new_tags_text)
+            self.show_status(f"Tag added: {new_tag}", 2000)
+            logger.info(
+                "Auto-added resolution tag '%s' for %dx%d image (%.2f MP)",
+                new_tag, width, height, total_pixels / 1_000_000
+            )
+
     def load_tags_from_file(self) -> None:
+        """Загрузить теги и описание из файла или кэша."""
         if not self.current_image_path:
             return
+        
         image_path_str = str(self.current_image_path)
+        
+        # Проверяем кэш сначала
         if image_path_str in self.text_cache:
-            cached_text = self.text_cache[image_path_str]
-            self.tag_input.setPlainText(cached_text)
+            cached_data = self.text_cache[image_path_str]
+            self.tag_input.setPlainText(cached_data.get('tags', ''))
+            self.description_input.setPlainText(cached_data.get('description', ''))
             logger.info("Loaded cached text for %s", self.current_image_path.name)
             # курсор в конец
             cursor = self.tag_input.textCursor()
@@ -1824,16 +1961,30 @@ class TagAutoCompleteApp(QMainWindow):
         if txt_path.exists():
             try:
                 with open(txt_path, "r", encoding="utf-8") as f:
-                    tags = f.read().strip()
+                    content = f.read()
+                
+                # Разделяем на теги и описание
+                if DESCRIPTION_SEPARATOR in content:
+                    parts = content.split(DESCRIPTION_SEPARATOR, 1)
+                    tags = parts[0].strip()
+                    description = parts[1].strip() if len(parts) > 1 else ""
+                else:
+                    # Обратная совместимость: файл без описания
+                    tags = content.strip()
+                    description = ""
+                
+                # Заполняем поля
                 self.tag_input.setPlainText(tags)
-                logger.info("Loaded tags from %s", txt_path.name)
+                self.description_input.setPlainText(description)
+                logger.info("Loaded tags and description from %s", txt_path.name)
             except Exception as exc:
                 logger.exception("Error loading tags: %s", exc)
                 self.show_status(f"Error loading tags: {exc}", 5000)
                 return
         else:
             self.tag_input.setPlainText("")
-            logger.info("No tags file found for %s, field cleared", self.current_image_path.name)
+            self.description_input.setPlainText("")
+            logger.info("No tags file found for %s, fields cleared", self.current_image_path.name)
 
         cursor = self.tag_input.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
@@ -1841,23 +1992,47 @@ class TagAutoCompleteApp(QMainWindow):
 
     @log_user_action("Save Tags")
     def save_tags(self) -> None:
+        """Сохранить теги и описание в файл.
+        
+        Файл создаётся только если есть теги или описание.
+        Пустые файлы не создаются.
+        """
         if not self.current_image_path:
             logger.warning("Attempted to save tags without loaded image")
             self.show_status("No image loaded to save tags for", 3000)
             return
-        
+
         tags = self.tag_input.toPlainText().strip()
+        description = self.description_input.toPlainText().strip()
         txt_path = self.current_image_path.with_suffix(".txt")
-        
+
+        # Проверяем есть ли что сохранять
+        if not tags and not description:
+            # Если файл существовал ранее, удаляем его (теги были очищены)
+            if txt_path.exists():
+                try:
+                    txt_path.unlink()
+                    logger.info("Deleted empty tags file: %s", txt_path.name)
+                except Exception as exc:
+                    logger.exception("Error deleting empty tags file: %s", exc)
+            return
+
+        # Формируем содержимое файла
+        if description:
+            content = f"{tags}\n{DESCRIPTION_SEPARATOR}\n{description}"
+        else:
+            content = tags
+
         # Логируем детали операции в дебаг-режиме
         if DEBUG_MODE:
             tag_count = len([tag.strip() for tag in tags.split(',') if tag.strip()])
-            logger.debug(f"Saving {tag_count} tags to {txt_path}")
-        
+            desc_lines = len(description.split('\n')) if description else 0
+            logger.debug(f"Saving {tag_count} tags and {desc_lines} description lines to {txt_path}")
+
         try:
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(tags)
-            logger.info("Tags saved to %s", txt_path)
+                f.write(content)
+            logger.info("Tags and description saved to %s", txt_path)
             self.show_status(f"Tags saved to {txt_path.name}", 3000)
         except Exception as exc:
             logger.exception("Error saving tags: %s", exc)
@@ -1872,63 +2047,63 @@ class TagAutoCompleteApp(QMainWindow):
         self.status_bar.showMessage(message, timeout)
 
     def _show_missing_database_dialog(self) -> None:
-        """Показать диалог об отсутствующей базе данных тегов."""
+        """Show dialog about missing tag database."""
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Icon.Warning)
-        msg.setWindowTitle("База данных тегов не найдена")
-        
+        msg.setWindowTitle("Tag Database Not Found")
+
         text = (
-            "Файл derpibooru.csv не найден!\n\n"
-            "Автодополнение тегов будет недоступно.\n\n"
-            "Чтобы включить автодополнение:\n"
-            "1. Скачайте файл derpibooru.csv\n"
-            "2. Поместите его в папку с программой\n"
-            "3. Перезапустите приложение"
+            "The derpibooru.csv file was not found!\n\n"
+            "Tag autocomplete will be unavailable.\n\n"
+            "To enable autocomplete:\n"
+            "1. Download the derpibooru.csv file\n"
+            "2. Place it in the program folder\n"
+            "3. Restart the application"
         )
         msg.setText(text)
-        
-        # Создаем кнопки
-        download_btn = msg.addButton("Скачать базу данных", QMessageBox.ButtonRole.ActionRole)
-        ok_btn = msg.addButton("Продолжить без автодополнения", QMessageBox.ButtonRole.AcceptRole)
-        
+
+        # Create buttons
+        download_btn = msg.addButton("Download Database", QMessageBox.ButtonRole.ActionRole)
+        ok_btn = msg.addButton("Continue Without Autocomplete", QMessageBox.ButtonRole.AcceptRole)
+
         msg.exec()
-        
-        # Обработка нажатия кнопки
+
+        # Handle button click
         if msg.clickedButton() == download_btn:
             self._open_database_download_link()
 
     def _show_database_error_dialog(self, error: str) -> None:
-        """Показать диалог об ошибке загрузки базы данных."""
+        """Show dialog about database loading error."""
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Icon.Critical)
-        msg.setWindowTitle("Ошибка загрузки базы данных")
-        
+        msg.setWindowTitle("Database Loading Error")
+
         text = (
-            f"Ошибка при загрузке файла derpibooru.csv:\n\n{error}\n\n"
-            "Возможные причины:\n"
-            "• Поврежденный файл\n"
-            "• Неправильный формат\n"
-            "• Недостаточно памяти\n\n"
-            "Автодополнение будет недоступно."
+            f"Error loading derpibooru.csv file:\n\n{error}\n\n"
+            "Possible causes:\n"
+            "• Corrupted file\n"
+            "• Incorrect format\n"
+            "• Insufficient memory\n\n"
+            "Autocomplete will be unavailable."
         )
         msg.setText(text)
         msg.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
         msg.exec()
 
     def _open_database_download_link(self) -> None:
-        """Открыть ссылку для скачивания базы данных."""
+        """Open database download link."""
         import webbrowser
         url = "https://github.com/DominikDoom/a1111-sd-webui-tagcomplete/tree/main/tags"
         try:
             webbrowser.open(url)
-            self.show_status("Открыта ссылка для скачивания базы данных", 3000)
+            self.show_status("Database download link opened", 3000)
         except Exception as e:
             logger.exception("Failed to open browser: %s", e)
-            # Показываем диалог с ссылкой для копирования
+            # Show dialog with link to copy
             msg = QMessageBox(self)
             msg.setIcon(QMessageBox.Icon.Information)
-            msg.setWindowTitle("Ссылка для скачивания")
-            msg.setText(f"Скопируйте ссылку в браузер:\n\n{url}")
+            msg.setWindowTitle("Download Link")
+            msg.setText(f"Copy this link to your browser:\n\n{url}")
             msg.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
             msg.exec()
 
@@ -1970,6 +2145,8 @@ class TagAutoCompleteApp(QMainWindow):
         max_allowed = int(self.width() * 0.45)
         target_width = min(width_for_100, max_allowed)
         self.tag_input.setMaximumWidth(target_width)
+        # description_input тоже ограничиваем той же шириной
+        self.description_input.setMaximumWidth(target_width)
         return super().resizeEvent(event)
 
 
